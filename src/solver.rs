@@ -44,13 +44,13 @@ pub struct Solver {
 }
 
 impl Solver {
-    pub fn new() -> Self {
+    pub fn new(variable_selector: Box<dyn VariableSelector>, value_selector: Box<dyn ValueSelector>) -> Self {
         Self {
             constraints: Vec::new(),
             propagators: Vec::new(),
             variables: Vec::new(),
-            variable_selector: Box::new(LexVariableSelector{}),
-            value_selector: Box::new(MinValueSelector{}),
+            variable_selector,
+            value_selector,
             state: Rc::new(RefCell::new(SolverState::new())),
             propagator_id_ctr: 0,
         }

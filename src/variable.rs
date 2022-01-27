@@ -38,7 +38,6 @@ impl Variable {
         self.solver_state.borrow_mut().fail();
     }
     pub fn remove(&mut self, x: i64) {
-        self.notify_listeners(Event::Removed);
         self.notify_listeners(Event::Modified);
         self.domain.remove(x);
     }
@@ -94,6 +93,9 @@ impl Variable {
     }
     pub fn iter(&self) -> impl Iterator<Item = i64> {
         self.domain.iter()
+    }
+    pub fn size(&self) -> u64 {
+        self.domain.size()
     }
 }
 

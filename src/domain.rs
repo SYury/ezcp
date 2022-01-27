@@ -16,6 +16,7 @@ pub trait Domain: {
     fn checkpoint(&mut self);
     fn rollback(&mut self);
     fn iter(&self) -> Box<dyn Iterator<Item = i64>>;
+    fn size(&self) -> u64;
 }
 
 /// implementation for domains which fit in {0, ..., 63}
@@ -137,5 +138,8 @@ impl Domain for SmallDomain {
             body: self.body.clone(),
             start: self.start.clone(),
         })
+    }
+    fn size(&self) -> u64 {
+        self.body.count_ones() as u64
     }
 }

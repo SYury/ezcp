@@ -2,6 +2,8 @@ use ezcp::alldifferent::AllDifferentConstraint;
 use ezcp::arithmetic::SimpleArithmeticConstraint;
 use ezcp::constraint::Constraint;
 use ezcp::solver::Solver;
+use ezcp::value_selector::MinValueSelector;
+use ezcp::variable_selector::FirstFailVariableSelector;
 use std::boxed::Box;
 use std::io;
 
@@ -15,7 +17,7 @@ fn read_int() -> usize {
 
 fn main() {
     let n = read_int();
-    let mut solver = Solver::new();
+    let mut solver = Solver::new(Box::new(FirstFailVariableSelector{}), Box::new(MinValueSelector{}));
     let mut vars = Vec::with_capacity(n);
     let mut diag1 = Vec::with_capacity(n);
     let mut diag2 = Vec::with_capacity(n);

@@ -1,6 +1,8 @@
 use ezcp::alldifferent::AllDifferentConstraint;
 use ezcp::constraint::Constraint;
 use ezcp::solver::Solver;
+use ezcp::value_selector::MinValueSelector;
+use ezcp::variable_selector::FirstFailVariableSelector;
 use std::boxed::Box;
 use std::mem::swap;
 
@@ -110,7 +112,7 @@ fn main() {
         }
         println!("{}", s);
     }
-    let mut solver = Solver::new();
+    let mut solver = Solver::new(Box::new(FirstFailVariableSelector{}), Box::new(MinValueSelector{}));
     let mut vars = Vec::with_capacity(81);
     for i in 0..9 {
         for j in 0..9 {
