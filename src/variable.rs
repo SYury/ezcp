@@ -1,7 +1,9 @@
+use crate::bitset::BitsetDomain;
 use crate::domain::{Domain, SmallDomain};
 use crate::events::{Event, event_index, N_EVENTS};
 use crate::propagator::Propagator;
 use crate::solver::SolverState;
+use std::boxed::Box;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -15,9 +17,9 @@ pub struct Variable {
 
 impl Variable {
     pub fn new(solver_state: Rc<RefCell<SolverState>>, lb: i64, ub: i64, name: String) -> Self {
-        let domain = match ub - lb <= 63 {
+        let domain: Box<dyn Domain> = match ub - lb <= 63 {
             true => Box::new(SmallDomain::new(solver_state.clone(), lb, ub)),
-            false => unimplemented!(),
+            false => Box::new(BitsetDomain::new(solver_state.clone(), lb, ub)),
         };
         Self {
             domain,
@@ -91,7 +93,7 @@ impl Variable {
     pub fn checkpoint(&mut self) {
         self.domain.checkpoint();
     }
-    pub fn iter(&self) -> impl Iterator<Item = i64> {
+    pub fn iter(&self) -> Box<dyn Iterator<Item = i64> + '_> {
         self.domain.iter()
     }
     pub fn size(&self) -> u64 {

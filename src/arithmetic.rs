@@ -76,11 +76,18 @@ impl Propagator for SimpleArithmeticPropagator {
     }
 
     fn propagate(&mut self) {
+        let mut x_vec = Vec::with_capacity(self.x.borrow().size() as usize);
+        let mut y_vec = Vec::with_capacity(self.y.borrow().size() as usize);
+        for val in self.x.borrow().iter() {
+            x_vec.push(val);
+        }
+        for val in self.y.borrow().iter() {
+            y_vec.push(val);
+        }
         if self.plus {
-            let mut y_vals: Vec<i64> = self.y.borrow().iter().collect();
-            y_vals.reverse();
-            let mut it_x = self.x.borrow().iter();
-            let mut it_y = y_vals.iter().cloned();
+            y_vec.reverse();
+            let mut it_x = x_vec.iter().cloned();
+            let mut it_y = y_vec.iter().cloned();
             let mut x = match it_x.next() {
                 Some(x) => x,
                 None => {
@@ -133,8 +140,8 @@ impl Propagator for SimpleArithmeticPropagator {
                 self.y.borrow_mut().remove(rem_y);
             }
         } else {
-            let mut it_x = self.x.borrow().iter();
-            let mut it_y = self.y.borrow().iter();
+            let mut it_x = x_vec.iter().cloned();
+            let mut it_y = y_vec.iter().cloned();
             let mut x = match it_x.next() {
                 Some(x) => x,
                 None => {

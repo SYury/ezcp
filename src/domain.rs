@@ -3,11 +3,10 @@ use std::boxed::Box;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-pub trait Domain: {
+pub trait Domain {
     fn new(solver_state: Rc<RefCell<SolverState>>, lb: i64, ub: i64) -> Self where Self: Sized;
     fn assign(&mut self, x: i64);
     fn is_assigned(&self) -> bool;
-    fn discard(&mut self, x: u8);
     fn remove(&mut self, x: i64);
     fn get_lb(&self) -> i64;
     fn get_ub(&self) -> i64;
@@ -15,7 +14,7 @@ pub trait Domain: {
     fn set_ub(&mut self, x: i64);
     fn checkpoint(&mut self);
     fn rollback(&mut self);
-    fn iter(&self) -> Box<dyn Iterator<Item = i64>>;
+    fn iter(&self) -> Box<dyn Iterator<Item = i64> + '_>;
     fn size(&self) -> u64;
 }
 
@@ -48,6 +47,12 @@ impl Iterator for SmallDomainIterator {
     }
 }
 
+impl SmallDomain {
+    fn discard(&mut self, x: u8) {
+        self.body &= !((1 as u64) << x);
+    }
+}
+
 impl Domain for SmallDomain {
     fn new(solver_state: Rc<RefCell<SolverState>>, lb: i64, ub: i64) -> Self {
         let body = match ub - lb {
@@ -75,9 +80,6 @@ impl Domain for SmallDomain {
     }
     fn is_assigned(&self) -> bool {
         self.body.count_ones() == 1
-    }
-    fn discard(&mut self, x: u8) {
-        self.body &= !((1 as u64) << x);
     }
     fn remove(&mut self, x: i64) {
         let v = (x - self.start) as u8;
@@ -133,7 +135,7 @@ impl Domain for SmallDomain {
         self.lb = state.2;
         self.ub = state.3;
     }
-    fn iter(&self) -> Box<dyn Iterator<Item = i64>> {
+    fn iter(&self) -> Box<dyn Iterator<Item = i64> + '_> {
         Box::new(SmallDomainIterator {
             body: self.body.clone(),
             start: self.start.clone(),

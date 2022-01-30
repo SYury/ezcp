@@ -204,10 +204,15 @@ impl ACMatching {
         let mut graph = Vec::<Vec<usize>>::with_capacity(n);
         let mut vals = Vec::<i64>::new();
         let mut h = BinaryHeap::<(i64, usize)>::new();
-        let mut it = Vec::<Box<dyn Iterator<Item = i64>>>::with_capacity(n);
+        let mut borrowed_vars = Vec::with_capacity(n);
+        let mut it = Vec::<Box<dyn Iterator<Item = i64> + '_>>::with_capacity(n);
+        for i in 0..n {
+            borrowed_vars.push(vars[i].borrow());
+        }
         for i in 0..n {
             graph.push(Vec::new());
-            it.push(Box::new(vars[i].borrow().iter()));
+            let var = &borrowed_vars[i];
+            it.push(var.iter());
         }
         for (i, iter) in it.iter_mut().enumerate() {
             if let Some(val) = iter.next() {
