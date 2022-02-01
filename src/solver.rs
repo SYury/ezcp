@@ -1,12 +1,12 @@
 use crate::constraint::Constraint;
 use crate::propagator::Propagator;
+use crate::value_selector::ValueSelector;
+use crate::variable::Variable;
+use crate::variable_selector::VariableSelector;
 use std::boxed::Box;
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::rc::Rc;
-use crate::value_selector::{MinValueSelector, ValueSelector};
-use crate::variable::Variable;
-use crate::variable_selector::{LexVariableSelector, VariableSelector};
 
 pub struct SolverState {
     status: i32,
@@ -44,7 +44,10 @@ pub struct Solver {
 }
 
 impl Solver {
-    pub fn new(variable_selector: Box<dyn VariableSelector>, value_selector: Box<dyn ValueSelector>) -> Self {
+    pub fn new(
+        variable_selector: Box<dyn VariableSelector>,
+        value_selector: Box<dyn ValueSelector>,
+    ) -> Self {
         Self {
             constraints: Vec::new(),
             propagators: Vec::new(),
@@ -70,7 +73,12 @@ impl Solver {
         id
     }
     pub fn new_variable(&mut self, lb: i64, ub: i64, name: String) -> Rc<RefCell<Variable>> {
-        let var = Rc::new(RefCell::new(Variable::new(self.state.clone(), lb, ub, name)));
+        let var = Rc::new(RefCell::new(Variable::new(
+            self.state.clone(),
+            lb,
+            ub,
+            name,
+        )));
         self.variables.push(var.clone());
         var
     }
@@ -86,7 +94,12 @@ impl Solver {
     pub fn propagate(&mut self) -> bool {
         while !self.state.borrow().propagation_queue.is_empty() {
             self.state.borrow_mut().resched_current = false;
-            let p = self.state.borrow_mut().propagation_queue.pop_front().unwrap();
+            let p = self
+                .state
+                .borrow_mut()
+                .propagation_queue
+                .pop_front()
+                .unwrap();
             p.borrow_mut().dequeue();
             p.borrow_mut().clear_events();
             p.borrow_mut().propagate();
@@ -99,7 +112,10 @@ impl Solver {
                 return false;
             }
             if self.state.borrow().resched_current && !p.borrow().is_idemponent() {
-                self.state.borrow_mut().propagation_queue.push_back(p.clone());
+                self.state
+                    .borrow_mut()
+                    .propagation_queue
+                    .push_back(p.clone());
                 p.borrow_mut().enqueue();
             }
         }
@@ -108,7 +124,7 @@ impl Solver {
 
     pub fn solve(&mut self) -> bool {
         #[cfg(debug_assertions)]
-        for (i, v) in self.variables.iter().enumerate() {
+        for v in self.variables.iter() {
             print!("VAR {}", v.borrow().name);
             for val in v.borrow().iter() {
                 print!(" {}", val);

@@ -3,15 +3,24 @@ use std::boxed::Box;
 use std::cell::RefCell;
 use std::rc::Rc;
 
+#[derive(PartialEq, Eq)]
+pub enum DomainState {
+    Same,
+    Modified,
+    Failed,
+}
+
 pub trait Domain {
-    fn new(solver_state: Rc<RefCell<SolverState>>, lb: i64, ub: i64) -> Self where Self: Sized;
-    fn assign(&mut self, x: i64);
+    fn new(solver_state: Rc<RefCell<SolverState>>, lb: i64, ub: i64) -> Self
+    where
+        Self: Sized;
+    fn assign(&mut self, x: i64) -> DomainState;
     fn is_assigned(&self) -> bool;
-    fn remove(&mut self, x: i64);
+    fn remove(&mut self, x: i64) -> DomainState;
     fn get_lb(&self) -> i64;
     fn get_ub(&self) -> i64;
-    fn set_lb(&mut self, x: i64);
-    fn set_ub(&mut self, x: i64);
+    fn set_lb(&mut self, x: i64) -> DomainState;
+    fn set_ub(&mut self, x: i64) -> DomainState;
     fn checkpoint(&mut self);
     fn rollback(&mut self);
     fn iter(&self) -> Box<dyn Iterator<Item = i64> + '_>;
@@ -68,27 +77,47 @@ impl Domain for SmallDomain {
             checkpoints: Vec::new(),
         }
     }
-    fn assign(&mut self, x: i64) {
+    fn assign(&mut self, x: i64) -> DomainState {
+        if x < self.start || x >= self.start + 64 {
+            self.solver_state.borrow_mut().fail();
+            return DomainState::Failed;
+        }
         let v = (x - self.start) as u8;
         if (self.body & ((1 as u64) << v)) == 0 {
             self.solver_state.borrow_mut().fail();
+            DomainState::Failed
         } else {
+            let modified = self.body != (1 as u64) << v;
             self.body = (1 as u64) << v;
             self.lb = v;
             self.ub = v;
+            if modified {
+                DomainState::Modified
+            } else {
+                DomainState::Same
+            }
         }
     }
     fn is_assigned(&self) -> bool {
         self.body.count_ones() == 1
     }
-    fn remove(&mut self, x: i64) {
+    fn remove(&mut self, x: i64) -> DomainState {
+        if x < self.start || x >= self.start + 64 {
+            return DomainState::Same;
+        }
         let v = (x - self.start) as u8;
+        let modified = self.body & (1u64 << v) > 0;
         self.discard(v);
         if v == self.lb && self.body > 0 {
             self.lb = self.body.trailing_zeros() as u8;
         }
         if v == self.ub && self.body > 0 {
             self.ub = 63 - self.body.leading_zeros() as u8;
+        }
+        if modified {
+            DomainState::Modified
+        } else {
+            DomainState::Same
         }
     }
     fn get_lb(&self) -> i64 {
@@ -97,36 +126,61 @@ impl Domain for SmallDomain {
     fn get_ub(&self) -> i64 {
         (self.ub as i64) + self.start
     }
-    fn set_lb(&mut self, x: i64) {
-        let y = x - self.start;
-        if y < 0 || y > 63 {
+    fn set_lb(&mut self, x: i64) -> DomainState {
+        if x < self.start {
+            return DomainState::Same;
+        }
+        if x >= self.start + 64 {
             self.solver_state.borrow_mut().fail();
-        } else {
-            let y1 = y as u8;
-            if y1 > self.lb {
-                for i in self.lb..y1 {
-                    self.discard(i);
+            return DomainState::Failed;
+        }
+        let mut modified = false;
+        let y = x - self.start;
+        let y1 = y as u8;
+        if y1 > self.lb {
+            for i in self.lb..y1 {
+                if self.body & (1u64 << i) > 0 {
+                    modified = true;
                 }
-                self.lb = y1;
+                self.discard(i);
             }
+            self.lb = y1;
+        }
+        if modified {
+            DomainState::Modified
+        } else {
+            DomainState::Same
         }
     }
-    fn set_ub(&mut self, x: i64) {
-        let y = x - self.start;
-        if y < 0 || y > 63 {
+    fn set_ub(&mut self, x: i64) -> DomainState {
+        if x < self.start {
             self.solver_state.borrow_mut().fail();
-        } else {
-            let y1 = y as u8;
-            if y1 < self.ub {
-                for i in y1+1..self.ub+1 {
-                    self.discard(i);
+            return DomainState::Failed;
+        }
+        if x >= self.start + 64 {
+            return DomainState::Same;
+        }
+        let mut modified = false;
+        let y = x - self.start;
+        let y1 = y as u8;
+        if y1 < self.ub {
+            for i in y1 + 1..self.ub + 1 {
+                if self.body & (1u64 << i) > 0 {
+                    modified = true;
                 }
-                self.ub = y1;
+                self.discard(i);
             }
+            self.ub = y1;
+        }
+        if modified {
+            DomainState::Modified
+        } else {
+            DomainState::Same
         }
     }
     fn checkpoint(&mut self) {
-        self.checkpoints.push((self.body, self.start, self.lb, self.ub));
+        self.checkpoints
+            .push((self.body, self.start, self.lb, self.ub));
     }
     fn rollback(&mut self) {
         let state = self.checkpoints.pop().unwrap();

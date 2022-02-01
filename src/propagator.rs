@@ -1,6 +1,5 @@
 use std::cell::RefCell;
 use std::rc::Rc;
-use crate::variable::Variable;
 
 pub struct PropagatorControlBlock {
     pub has_new_events: bool,
@@ -9,7 +8,6 @@ pub struct PropagatorControlBlock {
 }
 
 pub trait Propagator {
-
     fn listen(&self, self_pointer: Rc<RefCell<dyn Propagator>>);
 
     fn propagate(&mut self);
@@ -50,4 +48,3 @@ pub trait Propagator {
         self.get_cb().id
     }
 }
-

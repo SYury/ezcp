@@ -1,6 +1,6 @@
+use crate::variable::Variable;
 use std::cell::RefCell;
 use std::rc::Rc;
-use crate::variable::Variable;
 
 pub trait VariableSelector {
     fn select(&self, vars: Vec<Rc<RefCell<Variable>>>) -> Rc<RefCell<Variable>>;

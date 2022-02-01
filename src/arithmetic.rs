@@ -16,12 +16,7 @@ pub struct SimpleArithmeticConstraint {
 
 impl SimpleArithmeticConstraint {
     pub fn new(x: Rc<RefCell<Variable>>, y: Rc<RefCell<Variable>>, c: i64, plus: bool) -> Self {
-        Self {
-            x,
-            y,
-            c,
-            plus
-        }
+        Self { x, y, c, plus }
     }
 }
 
@@ -39,7 +34,13 @@ impl Constraint for SimpleArithmeticConstraint {
     }
 
     fn create_propagators(&self, solver: &mut Solver) {
-        let p = Rc::new(RefCell::new(SimpleArithmeticPropagator::new(self.x.clone(), self.y.clone(), self.c, self.plus, solver.new_propagator_id())));
+        let p = Rc::new(RefCell::new(SimpleArithmeticPropagator::new(
+            self.x.clone(),
+            self.y.clone(),
+            self.c,
+            self.plus,
+            solver.new_propagator_id(),
+        )));
         solver.add_propagator(p.clone());
         p.borrow().listen(p.clone());
     }
@@ -54,12 +55,18 @@ pub struct SimpleArithmeticPropagator {
 }
 
 impl SimpleArithmeticPropagator {
-    pub fn new(x: Rc<RefCell<Variable>>, y: Rc<RefCell<Variable>>, c: i64, plus: bool, id: usize) -> Self {
+    pub fn new(
+        x: Rc<RefCell<Variable>>,
+        y: Rc<RefCell<Variable>>,
+        c: i64,
+        plus: bool,
+        id: usize,
+    ) -> Self {
         Self {
             pcb: PropagatorControlBlock {
                 has_new_events: false,
                 queued: false,
-                id
+                id,
             },
             x,
             y,
@@ -71,8 +78,12 @@ impl SimpleArithmeticPropagator {
 
 impl Propagator for SimpleArithmeticPropagator {
     fn listen(&self, self_pointer: Rc<RefCell<dyn Propagator>>) {
-        self.x.borrow_mut().add_listener(self_pointer.clone(), Event::Modified);
-        self.y.borrow_mut().add_listener(self_pointer, Event::Modified);
+        self.x
+            .borrow_mut()
+            .add_listener(self_pointer.clone(), Event::Modified);
+        self.y
+            .borrow_mut()
+            .add_listener(self_pointer, Event::Modified);
     }
 
     fn propagate(&mut self) {

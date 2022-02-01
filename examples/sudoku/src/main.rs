@@ -1,10 +1,8 @@
 use ezcp::alldifferent::AllDifferentConstraint;
-use ezcp::constraint::Constraint;
 use ezcp::solver::Solver;
 use ezcp::value_selector::MinValueSelector;
 use ezcp::variable_selector::FirstFailVariableSelector;
 use std::boxed::Box;
-use std::mem::swap;
 
 const RNG_MOD: u64 = 1 << 31;
 const RNG_MUL: u64 = 5;
@@ -19,7 +17,10 @@ fn read_int() -> u64 {
     std::io::stdin()
         .read_line(&mut input_line)
         .expect("No input!");
-    input_line.trim().parse().expect("Input is not a valid unsigned 64-bit integer!")
+    input_line
+        .trim()
+        .parse()
+        .expect("Input is not a valid unsigned 64-bit integer!")
 }
 
 fn generate_board(max_transforms: usize, mut seed: u64) -> [[u8; 9]; 9] {
@@ -35,10 +36,10 @@ fn generate_board(max_transforms: usize, mut seed: u64) -> [[u8; 9]; 9] {
     }
     for _ in 0..max_transforms {
         seed = rand(seed);
-        let action = (seed%19) as usize;
+        let action = (seed % 19) as usize;
         if action < 9 {
-            let stripe = action/3;
-            let (mut i, mut j) = match action%3 {
+            let stripe = action / 3;
+            let (mut i, mut j) = match action % 3 {
                 0 => (0, 1),
                 1 => (0, 2),
                 _ => (1, 2),
@@ -51,8 +52,8 @@ fn generate_board(max_transforms: usize, mut seed: u64) -> [[u8; 9]; 9] {
                 board[j][k] = x;
             }
         } else if action < 18 {
-            let stripe = (action - 9)/3;
-            let (mut i, mut j) = match (action - 9)%3 {
+            let stripe = (action - 9) / 3;
+            let (mut i, mut j) = match (action - 9) % 3 {
                 0 => (0, 1),
                 1 => (0, 2),
                 _ => (1, 2),
@@ -85,7 +86,7 @@ fn generate_mask(n_masked: usize, mut seed: u64) -> [[bool; 9]; 9] {
     }
     for i in 1..81 {
         seed = rand(seed);
-        let j = (seed%((i + 1) as u64)) as usize;
+        let j = (seed % ((i + 1) as u64)) as usize;
         seq.swap(i, j);
     }
     let mut ans = [[false; 9]; 9];
@@ -112,14 +113,21 @@ fn main() {
         }
         println!("{}", s);
     }
-    let mut solver = Solver::new(Box::new(FirstFailVariableSelector{}), Box::new(MinValueSelector{}));
+    let mut solver = Solver::new(
+        Box::new(FirstFailVariableSelector {}),
+        Box::new(MinValueSelector {}),
+    );
     let mut vars = Vec::with_capacity(81);
     for i in 0..9 {
         for j in 0..9 {
             if mask[i][j] {
                 vars.push(solver.new_variable(1, 9, format!("cell({}, {})", i, j)));
             } else {
-                vars.push(solver.new_variable(board[i][j] as i64, board[i][j] as i64, format!("cell({}, {})", i, j)));
+                vars.push(solver.new_variable(
+                    board[i][j] as i64,
+                    board[i][j] as i64,
+                    format!("cell({}, {})", i, j),
+                ));
             }
         }
     }

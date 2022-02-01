@@ -1,4 +1,4 @@
-use crate::domain::Domain;
+use crate::domain::{Domain, DomainState};
 use crate::solver::SolverState;
 use std::boxed::Box;
 use std::cell::RefCell;
@@ -17,12 +17,6 @@ pub struct BitsetDomain {
 }
 
 impl BitsetDomain {
-    fn id(&self, x: i64) -> u64 {
-        assert!(x >= self.start);
-        let id = (x - self.start) as u64;
-        assert!(id < (self.data.len() as u64) * 64);
-        id
-    }
     fn save(&mut self, block: usize) {
         if self.modified[block] >= self.trail.len() || self.trail[self.modified[block]].0 != block {
             self.modified[block] = self.trail.len();
@@ -48,7 +42,7 @@ impl Iterator for BitsetDomainIterator<'_> {
             match self.iter.next() {
                 None => {
                     return None;
-                },
+                }
                 Some(x) => {
                     self.block = *x;
                 }
@@ -85,12 +79,22 @@ impl Domain for BitsetDomain {
         }
     }
 
-    fn assign(&mut self, x: i64) {
-        let id = self.id(x);
-        let block = (id/64) as usize;
+    fn assign(&mut self, x: i64) -> DomainState {
+        if x < self.start || x >= self.start + (self.data.len() as i64) * 64 {
+            self.solver_state.borrow_mut().fail();
+            return DomainState::Failed;
+        }
+        let id = (x - self.start) as u64;
+        let block = (id / 64) as usize;
         let shift = id - (block as u64) * 64;
-        assert!(0 < (self.data[block] & (1u64 << shift)));
-        for i in self.first_block..self.last_block+1 {
+        if 0 == (self.data[block] & (1u64 << shift)) {
+            self.solver_state.borrow_mut().fail();
+            return DomainState::Failed;
+        }
+        if self.size == 1 {
+            return DomainState::Same;
+        }
+        for i in self.first_block..self.last_block + 1 {
             if i == block || self.data[i] != 0 {
                 self.save(i);
             }
@@ -100,25 +104,29 @@ impl Domain for BitsetDomain {
         self.data[block] = 1u64 << shift;
         self.first_block = block;
         self.last_block = block;
+        DomainState::Modified
     }
 
     fn is_assigned(&self) -> bool {
         self.size == 1
     }
 
-    fn remove(&mut self, x: i64) {
-        let id = self.id(x);
-        let block = (id/64) as usize;
+    fn remove(&mut self, x: i64) -> DomainState {
+        if x < self.start || x >= self.start + (self.data.len() as i64) * 64 {
+            return DomainState::Same;
+        }
+        let id = (x - self.start) as u64;
+        let block = (id / 64) as usize;
         let shift = id - (block as u64) * 64;
         if 0 == (self.data[block] & (1u64 << shift)) {
-            return;
+            return DomainState::Same;
         }
         self.save(block);
         self.data[block] ^= 1u64 << shift;
         self.size -= 1;
         if self.size == 0 {
             self.solver_state.borrow_mut().fail();
-            return;
+            return DomainState::Failed;
         }
         while self.data[self.first_block] == 0 {
             self.first_block += 1;
@@ -126,6 +134,7 @@ impl Domain for BitsetDomain {
         while self.data[self.last_block] == 0 {
             self.last_block -= 1;
         }
+        DomainState::Modified
     }
 
     fn get_lb(&self) -> i64 {
@@ -138,11 +147,19 @@ impl Domain for BitsetDomain {
         self.start + ((self.last_block as i64) * 64 + (shift as i64))
     }
 
-    fn set_lb(&mut self, x: i64) {
-        let id = self.id(x);
-        let block = (id/64) as usize;
+    fn set_lb(&mut self, x: i64) -> DomainState {
+        if x < self.start {
+            return DomainState::Same;
+        }
+        if x >= self.start + (self.data.len() as i64) * 64 {
+            self.solver_state.borrow_mut().fail();
+            return DomainState::Failed;
+        }
+        let id = (x - self.start) as u64;
+        let block = (id / 64) as usize;
         let shift = id - (block as u64) * 64;
         if block >= self.first_block {
+            let old_size = self.size;
             for i in self.first_block..block {
                 if self.data[i] != 0 {
                     self.save(i);
@@ -157,20 +174,32 @@ impl Domain for BitsetDomain {
             }
             if self.size == 0 {
                 self.solver_state.borrow_mut().fail();
-                return;
+                return DomainState::Failed;
             }
             while self.data[self.first_block] == 0 {
                 self.first_block += 1;
             }
+            if old_size != self.size {
+                return DomainState::Modified;
+            }
         }
+        DomainState::Same
     }
 
-    fn set_ub(&mut self, x: i64) {
-        let id = self.id(x);
-        let block = (id/64) as usize;
+    fn set_ub(&mut self, x: i64) -> DomainState {
+        if x < self.start {
+            self.solver_state.borrow_mut().fail();
+            return DomainState::Failed;
+        }
+        if x >= self.start + (self.data.len() as i64) * 64 {
+            return DomainState::Same;
+        }
+        let id = (x - self.start) as u64;
+        let block = (id / 64) as usize;
         let shift = id - (block as u64) * 64;
         if block <= self.last_block {
-            for i in block+1..self.last_block+1 {
+            let old_size = self.size;
+            for i in block + 1..self.last_block + 1 {
                 if self.data[i] != 0 {
                     self.save(i);
                     self.size -= self.data[i].count_ones() as u64;
@@ -184,12 +213,16 @@ impl Domain for BitsetDomain {
             }
             if self.size == 0 {
                 self.solver_state.borrow_mut().fail();
-                return;
+                return DomainState::Failed;
             }
             while self.data[self.last_block] == 0 {
                 self.last_block -= 1;
             }
+            if old_size != self.size {
+                return DomainState::Modified;
+            }
         }
+        DomainState::Same
     }
 
     fn checkpoint(&mut self) {
@@ -198,7 +231,7 @@ impl Domain for BitsetDomain {
 
     fn rollback(&mut self) {
         for (i, old) in self.trail.drain(..) {
-            let delta = old^self.data[i];
+            let delta = old ^ self.data[i];
             if delta == 0 {
                 continue;
             }
@@ -220,7 +253,7 @@ impl Domain for BitsetDomain {
             block: 0,
             remain: self.last_block - self.first_block + 1,
             start: self.start + (64 * self.first_block as i64) - 64,
-            })
+        })
     }
 
     fn size(&self) -> u64 {

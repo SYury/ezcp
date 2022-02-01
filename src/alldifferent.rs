@@ -2,20 +2,18 @@ use crate::constraint::Constraint;
 use crate::events::Event;
 use crate::propagator::{Propagator, PropagatorControlBlock};
 use crate::solver::Solver;
+use crate::variable::Variable;
 use std::cell::RefCell;
 use std::collections::{BinaryHeap, HashSet};
 use std::rc::Rc;
-use crate::variable::Variable;
 
 pub struct AllDifferentConstraint {
-    vars: Vec<Rc<RefCell<Variable>>>
+    vars: Vec<Rc<RefCell<Variable>>>,
 }
 
 impl AllDifferentConstraint {
     pub fn new(vars: Vec<Rc<RefCell<Variable>>>) -> Self {
-        Self {
-            vars
-        }
+        Self { vars }
     }
 }
 
@@ -35,7 +33,10 @@ impl Constraint for AllDifferentConstraint {
         true
     }
     fn create_propagators(&self, solver: &mut Solver) {
-        let p = Rc::new(RefCell::new(AllDifferentACPropagator::new(self.vars.clone(), solver.new_propagator_id())));
+        let p = Rc::new(RefCell::new(AllDifferentACPropagator::new(
+            self.vars.clone(),
+            solver.new_propagator_id(),
+        )));
         solver.add_propagator(p.clone());
         p.borrow().listen(p.clone());
     }
@@ -253,7 +254,7 @@ impl ACMatching {
             graph[s].push(e);
             graph[i].push(e + 1);
         }
-        for i in n..vals.len()+n {
+        for i in n..vals.len() + n {
             let e = edges.len();
             edges.push(FlowEdge::new(t, 1));
             edges.push(FlowEdge::new(i, 0));
@@ -302,14 +303,18 @@ impl ACMatching {
         while self.ptr[v] < self.graph[v].len() {
             let id = self.graph[v][self.ptr[v]];
             let u = self.edges[id].to;
-            if self.level[v] + 1 != self.level[u] || self.edges[id].capacity == self.edges[id].flow {
+            if self.level[v] + 1 != self.level[u] || self.edges[id].capacity == self.edges[id].flow
+            {
                 self.ptr[v] += 1;
                 continue;
             }
-            let nxt = self.dfs(u, i32::min(pushed, self.edges[id].capacity - self.edges[id].flow));
+            let nxt = self.dfs(
+                u,
+                i32::min(pushed, self.edges[id].capacity - self.edges[id].flow),
+            );
             if nxt > 0 {
                 self.edges[id].flow += nxt;
-                self.edges[id^1].flow -= nxt;
+                self.edges[id ^ 1].flow -= nxt;
                 return nxt;
             }
             self.ptr[v] += 1;
@@ -341,7 +346,7 @@ impl ACMatching {
             return None;
         }
         let mut ans = vec![Vec::<usize>::new(); self.graph.len() - 2];
-        for v in 0..self.graph.len()-2-self.vals.len() {
+        for v in 0..self.graph.len() - 2 - self.vals.len() {
             for id in self.graph[v].iter().cloned() {
                 let u = self.edges[id].to;
                 if self.edges[id].to < self.graph.len() - 2 && self.edges[id].capacity > 0 {
@@ -359,7 +364,7 @@ impl ACMatching {
 
 pub struct AllDifferentACPropagator {
     pcb: PropagatorControlBlock,
-    vars: Vec<Rc<RefCell<Variable>>>
+    vars: Vec<Rc<RefCell<Variable>>>,
 }
 
 impl AllDifferentACPropagator {
@@ -368,7 +373,7 @@ impl AllDifferentACPropagator {
             pcb: PropagatorControlBlock {
                 has_new_events: false,
                 queued: false,
-                id
+                id,
             },
             vars,
         }
@@ -376,10 +381,10 @@ impl AllDifferentACPropagator {
 }
 
 impl Propagator for AllDifferentACPropagator {
-
     fn listen(&self, self_pointer: Rc<RefCell<dyn Propagator>>) {
         for v in &self.vars {
-            v.borrow_mut().add_listener(self_pointer.clone(), Event::Modified);
+            v.borrow_mut()
+                .add_listener(self_pointer.clone(), Event::Modified);
         }
     }
 
@@ -389,7 +394,9 @@ impl Propagator for AllDifferentACPropagator {
             let mut scc = SCC::new(g);
             let mut edges = scc.get_bad_edges();
             for (val, i) in edges.drain(..) {
-                self.vars[i].borrow_mut().remove(m.vals[val - self.vars.len()]);
+                self.vars[i]
+                    .borrow_mut()
+                    .remove(m.vals[val - self.vars.len()]);
             }
         } else {
             self.vars[0].borrow().fail();

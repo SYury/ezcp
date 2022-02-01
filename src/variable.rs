@@ -1,6 +1,6 @@
 use crate::bitset::BitsetDomain;
-use crate::domain::{Domain, SmallDomain};
-use crate::events::{Event, event_index, N_EVENTS};
+use crate::domain::{Domain, DomainState, SmallDomain};
+use crate::events::{event_index, Event, N_EVENTS};
 use crate::propagator::Propagator;
 use crate::solver::SolverState;
 use std::boxed::Box;
@@ -29,9 +29,10 @@ impl Variable {
         }
     }
     pub fn assign(&mut self, x: i64) {
-        self.notify_listeners(Event::Assigned);
-        self.notify_listeners(Event::Modified);
-        self.domain.assign(x);
+        if self.domain.assign(x) == DomainState::Modified {
+            self.notify_listeners(Event::Assigned);
+            self.notify_listeners(Event::Modified);
+        }
     }
     pub fn is_assigned(&self) -> bool {
         self.domain.is_assigned()
@@ -40,8 +41,15 @@ impl Variable {
         self.solver_state.borrow_mut().fail();
     }
     pub fn remove(&mut self, x: i64) {
-        self.notify_listeners(Event::Modified);
-        self.domain.remove(x);
+        if self.domain.get_lb() == x {
+            self.notify_listeners(Event::LowerBound);
+        }
+        if self.domain.get_ub() == x {
+            self.notify_listeners(Event::UpperBound);
+        }
+        if self.domain.remove(x) == DomainState::Modified {
+            self.notify_listeners(Event::Modified);
+        }
     }
     pub fn get_lb(&self) -> i64 {
         self.domain.get_lb()
@@ -50,14 +58,16 @@ impl Variable {
         self.domain.get_ub()
     }
     pub fn set_lb(&mut self, x: i64) {
-        self.notify_listeners(Event::LowerBound);
-        self.notify_listeners(Event::Modified);
-        self.domain.set_lb(x)
+        if self.domain.set_lb(x) == DomainState::Modified {
+            self.notify_listeners(Event::LowerBound);
+            self.notify_listeners(Event::Modified);
+        }
     }
     pub fn set_ub(&mut self, x: i64) {
-        self.notify_listeners(Event::UpperBound);
-        self.notify_listeners(Event::Modified);
-        self.domain.set_ub(x)
+        if self.domain.set_ub(x) == DomainState::Modified {
+            self.notify_listeners(Event::UpperBound);
+            self.notify_listeners(Event::Modified);
+        }
     }
     pub fn value(&self) -> i64 {
         let lb = self.domain.get_lb();
@@ -77,7 +87,8 @@ impl Variable {
         for (_, listener) in self.listeners[event_index(&event)].drain() {
             if let Ok(mut ref_mut) = listener.try_borrow_mut() {
                 ref_mut.new_event();
-            } else { // we are inside listener's propagate()
+            } else {
+                // we are inside listener's propagate()
                 self.solver_state.borrow_mut().reschedule();
                 continue;
             }
@@ -100,4 +111,3 @@ impl Variable {
         self.domain.size()
     }
 }
-
