@@ -5,6 +5,7 @@ pub mod bitset;
 pub mod constraint;
 pub mod domain;
 pub mod events;
+pub mod objective_function;
 pub mod propagator;
 pub mod solver;
 pub mod value_selector;

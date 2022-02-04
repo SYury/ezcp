@@ -1,4 +1,5 @@
 use crate::constraint::Constraint;
+use crate::objective_function::ObjectiveFunction;
 use crate::propagator::Propagator;
 use crate::value_selector::ValueSelector;
 use crate::variable::Variable;
@@ -40,6 +41,9 @@ pub struct Solver {
     variable_selector: Box<dyn VariableSelector>,
     value_selector: Box<dyn ValueSelector>,
     state: Rc<RefCell<SolverState>>,
+    objective: Option<Box<dyn ObjectiveFunction>>,
+    current_min: i64,
+    best_solution: Vec<i64>,
     propagator_id_ctr: usize,
 }
 
@@ -55,6 +59,9 @@ impl Solver {
             variable_selector,
             value_selector,
             state: Rc::new(RefCell::new(SolverState::new())),
+            objective: None,
+            current_min: i64::MAX,
+            best_solution: Vec::new(),
             propagator_id_ctr: 0,
         }
     }
@@ -64,8 +71,14 @@ impl Solver {
         let r = self.constraints.last_mut().unwrap().as_mut();
         r
     }
+    pub fn add_objective(&mut self, objective: Box<dyn ObjectiveFunction>) {
+        self.objective = Some(objective);
+    }
     pub fn add_propagator(&mut self, p: Rc<RefCell<dyn Propagator>>) {
         self.propagators.push(p);
+    }
+    pub fn get_objective(&self) -> i64 {
+        self.current_min
     }
     pub fn new_propagator_id(&mut self) -> usize {
         let id = self.propagator_id_ctr;
@@ -122,7 +135,7 @@ impl Solver {
         true
     }
 
-    pub fn solve(&mut self) -> bool {
+    fn search(&mut self) -> bool {
         #[cfg(debug_assertions)]
         for v in self.variables.iter() {
             print!("VAR {}", v.borrow().name);
@@ -148,7 +161,33 @@ impl Solver {
             }
         }
         if vars.is_empty() {
+            if let Some(objective) = &self.objective {
+                let val = objective.eval();
+                if val < self.current_min {
+                    self.current_min = val;
+                    if self.best_solution.is_empty() {
+                        self.best_solution = vec![0i64; self.variables.len()];
+                    }
+                    for (i, var) in self.variables.iter().enumerate() {
+                        self.best_solution[i] = var.borrow().value();
+                    }
+                }
+            }
+            if self.objective.is_some() {
+                for v in &mut self.variables {
+                    v.borrow_mut().rollback();
+                }
+            }
             return true;
+        }
+        if let Some(objective) = &self.objective {
+            let bound = objective.bound();
+            if bound >= self.current_min {
+                for v in &mut self.variables {
+                    v.borrow_mut().rollback();
+                }
+                return false;
+            }
         }
         let v = self.variable_selector.select(vars);
         let x = self.value_selector.select(v.borrow().domain.as_ref());
@@ -162,8 +201,13 @@ impl Solver {
             println!("fixed value {} for variable {}", x, i);
         }
         v.borrow_mut().assign(x);
-        if self.solve() {
-            return true;
+        let mut found = false;
+        if self.search() {
+            if self.objective.is_none() {
+                return true;
+            } else {
+                found = true;
+            }
         }
         #[cfg(debug_assertions)]
         println!("returned after assignment");
@@ -178,8 +222,12 @@ impl Solver {
             }
             println!("removed value {} from variable {}", x, i);
         }
-        if self.solve() {
-            return true;
+        if self.search() {
+            if self.objective.is_none() {
+                return true;
+            } else {
+                found = true;
+            }
         }
         #[cfg(debug_assertions)]
         println!("returned after removal");
@@ -187,6 +235,35 @@ impl Solver {
         for v in &mut self.variables {
             v.borrow_mut().rollback();
         }
-        false
+        found
     }
+
+    pub fn solve(&mut self) -> bool {
+        let res = self.search();
+        if self.objective.is_some() && res {
+            for (i, v) in self.variables.iter_mut().enumerate() {
+                v.borrow_mut().assign(self.best_solution[i]);
+            }
+        }
+        res
+    }
+}
+
+
+// this function transforms satisfaction problem to minimization problem via binary search
+// create_solver is a function that creates a solver for problem "there is a solution with value <= x"
+// l and r are bounds on optimal solution
+// l < opt
+// r >= opt
+pub fn binary_search_optimizer(create_solver: impl Fn(i64) -> Solver, mut l: i64, mut r: i64) -> i64 {
+    while r - l > 1 {
+        let mid = (l + r)/2;
+        let mut solver = create_solver(mid);
+        if solver.solve() {
+            r = mid;
+        } else {
+            l = mid;
+        }
+    }
+    r
 }
