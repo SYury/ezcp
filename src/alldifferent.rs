@@ -4,7 +4,7 @@ use crate::propagator::{Propagator, PropagatorControlBlock};
 use crate::solver::Solver;
 use crate::variable::Variable;
 use std::cell::RefCell;
-use std::collections::{BinaryHeap, HashSet};
+use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::rc::Rc;
 
 pub struct AllDifferentConstraint {
@@ -42,7 +42,7 @@ impl Constraint for AllDifferentConstraint {
     }
 }
 
-struct SCC {
+pub struct SCC {
     gr: Vec<Vec<usize>>,
     grt: Vec<Vec<usize>>,
     used: Vec<bool>,
@@ -185,7 +185,7 @@ impl FlowEdge {
     }
 }
 
-struct ACMatching {
+pub(crate) struct ACMatching {
     s: usize,
     t: usize,
     edges: Vec<FlowEdge>,
@@ -198,8 +198,13 @@ struct ACMatching {
     qt: usize,
 }
 
+pub(crate) enum MatchingReturnValue {
+    MatchingGraph,
+    FlowGraph,
+}
+
 impl ACMatching {
-    pub fn new(vars: &Vec<Rc<RefCell<Variable>>>) -> Self {
+    pub fn new(vars: &Vec<Rc<RefCell<Variable>>>, count: Option<&HashMap<i64, i32>>) -> Self {
         let n = vars.len();
         let mut edges = Vec::<FlowEdge>::new();
         let mut graph = Vec::<Vec<usize>>::with_capacity(n);
@@ -256,7 +261,11 @@ impl ACMatching {
         }
         for i in n..vals.len() + n {
             let e = edges.len();
-            edges.push(FlowEdge::new(t, 1));
+            if count.is_some() {
+                edges.push(FlowEdge::new(t, *count.unwrap().get(&vals[i - n]).unwrap()));
+            } else {
+                edges.push(FlowEdge::new(t, 1));
+            }
             edges.push(FlowEdge::new(i, 0));
             graph[i].push(e);
             graph[t].push(e + 1);
@@ -321,7 +330,7 @@ impl ACMatching {
         }
         0
     }
-    pub fn matching(&mut self) -> Option<Vec<Vec<usize>>> {
+    pub fn matching(&mut self, ret: MatchingReturnValue) -> Option<Vec<Vec<usize>>> {
         let mut flow = 0;
         loop {
             self.ptr.fill(0);
@@ -345,20 +354,39 @@ impl ACMatching {
         if flow as usize != self.graph.len() - self.vals.len() - 2 {
             return None;
         }
-        let mut ans = vec![Vec::<usize>::new(); self.graph.len() - 2];
-        for v in 0..self.graph.len() - 2 - self.vals.len() {
-            for id in self.graph[v].iter().cloned() {
-                let u = self.edges[id].to;
-                if self.edges[id].to < self.graph.len() - 2 && self.edges[id].capacity > 0 {
-                    if self.edges[id].flow == self.edges[id].capacity {
-                        ans[v].push(u);
-                    } else {
-                        ans[u].push(v);
+        match ret {
+            MatchingReturnValue::MatchingGraph => {
+                let mut ans = vec![Vec::<usize>::new(); self.graph.len() - 2];
+                for v in 0..self.graph.len() - 2 - self.vals.len() {
+                    for id in self.graph[v].iter().cloned() {
+                        let u = self.edges[id].to;
+                        if self.edges[id].to < self.graph.len() - 2 && self.edges[id].capacity > 0 {
+                            if self.edges[id].flow == self.edges[id].capacity {
+                                ans[v].push(u);
+                            } else {
+                                ans[u].push(v);
+                            }
+                        }
                     }
                 }
+                Some(ans)
+            }
+            MatchingReturnValue::FlowGraph => {
+                let mut ans = vec![Vec::<usize>::new(); self.graph.len()];
+                for (v, edges) in self.graph.iter().enumerate() {
+                    for id in edges.iter().cloned() {
+                        let u = self.edges[id].to;
+                        if self.edges[id].capacity > self.edges[id].flow {
+                            ans[v].push(u);
+                        }
+                        if self.edges[id].flow > 0 {
+                            ans[u].push(v);
+                        }
+                    }
+                }
+                Some(ans)
             }
         }
-        Some(ans)
     }
 }
 
@@ -370,11 +398,7 @@ pub struct AllDifferentACPropagator {
 impl AllDifferentACPropagator {
     pub fn new(vars: Vec<Rc<RefCell<Variable>>>, id: usize) -> Self {
         Self {
-            pcb: PropagatorControlBlock {
-                has_new_events: false,
-                queued: false,
-                id,
-            },
+            pcb: PropagatorControlBlock::new(id),
             vars,
         }
     }
@@ -389,8 +413,8 @@ impl Propagator for AllDifferentACPropagator {
     }
 
     fn propagate(&mut self) {
-        let mut m = ACMatching::new(&self.vars);
-        if let Some(g) = m.matching() {
+        let mut m = ACMatching::new(&self.vars, None);
+        if let Some(g) = m.matching(MatchingReturnValue::MatchingGraph) {
             let mut scc = SCC::new(g);
             let mut edges = scc.get_bad_edges();
             for (val, i) in edges.drain(..) {

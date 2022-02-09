@@ -137,6 +137,10 @@ impl Solver {
 
     fn search(&mut self) -> bool {
         #[cfg(debug_assertions)]
+        if self.objective.is_some() {
+            println!("current best objective = {}", self.current_min);
+        }
+        #[cfg(debug_assertions)]
         for v in self.variables.iter() {
             print!("VAR {}", v.borrow().name);
             for val in v.borrow().iter() {
@@ -172,8 +176,6 @@ impl Solver {
                         self.best_solution[i] = var.borrow().value();
                     }
                 }
-            }
-            if self.objective.is_some() {
                 for v in &mut self.variables {
                     v.borrow_mut().rollback();
                 }
@@ -249,15 +251,18 @@ impl Solver {
     }
 }
 
-
 // this function transforms satisfaction problem to minimization problem via binary search
 // create_solver is a function that creates a solver for problem "there is a solution with value <= x"
 // l and r are bounds on optimal solution
 // l < opt
 // r >= opt
-pub fn binary_search_optimizer(create_solver: impl Fn(i64) -> Solver, mut l: i64, mut r: i64) -> i64 {
+pub fn binary_search_optimizer(
+    create_solver: impl Fn(i64) -> Solver,
+    mut l: i64,
+    mut r: i64,
+) -> i64 {
     while r - l > 1 {
-        let mid = (l + r)/2;
+        let mid = (l + r) / 2;
         let mut solver = create_solver(mid);
         if solver.solve() {
             r = mid;

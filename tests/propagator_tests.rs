@@ -100,13 +100,11 @@ fn test_optimization() {
     );
     let mut vars = Vec::with_capacity(10);
     for i in 0..10 {
-        vars.push(solver.new_variable(0, 20, format!("var_{}", i)));
+        vars.push(solver.new_variable(i as i64, 20, format!("var_{}", i)));
     }
     let ad = Box::new(AllDifferentConstraint::new(vars.clone()));
     solver.add_constraint(ad);
-    let obj = Box::new(SumObjective {
-        vars
-    });
+    let obj = Box::new(SumObjective { vars });
     solver.add_objective(obj);
     assert!(solver.solve());
     assert!(solver.get_objective() == 45);

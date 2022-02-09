@@ -111,6 +111,16 @@ impl Domain for BitsetDomain {
         self.size == 1
     }
 
+    fn possible(&self, x: i64) -> bool {
+        if x < self.start || x >= self.start + (self.data.len() as i64) * 64 {
+            return false;
+        }
+        let id = (x - self.start) as u64;
+        let block = (id / 64) as usize;
+        let shift = id - (block as u64) * 64;
+        0 != (self.data[block] & (1u64 << shift))
+    }
+
     fn remove(&mut self, x: i64) -> DomainState {
         if x < self.start || x >= self.start + (self.data.len() as i64) * 64 {
             return DomainState::Same;

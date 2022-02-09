@@ -28,27 +28,48 @@ impl Variable {
             name,
         }
     }
-    pub fn assign(&mut self, x: i64) {
-        if self.domain.assign(x) == DomainState::Modified {
-            self.notify_listeners(Event::Assigned);
-            self.notify_listeners(Event::Modified);
+    pub fn assign(&mut self, x: i64) -> bool {
+        match self.domain.assign(x) {
+            DomainState::Modified => {
+                self.notify_listeners(Event::Assigned);
+                self.notify_listeners(Event::Modified);
+                return true;
+            }
+            DomainState::Failed => {
+                return false;
+            }
+            _ => {
+                return true;
+            }
         }
     }
     pub fn is_assigned(&self) -> bool {
         self.domain.is_assigned()
     }
+    pub fn possible(&self, x: i64) -> bool {
+        self.domain.possible(x)
+    }
     pub fn fail(&self) {
         self.solver_state.borrow_mut().fail();
     }
-    pub fn remove(&mut self, x: i64) {
+    pub fn remove(&mut self, x: i64) -> bool {
         if self.domain.get_lb() == x {
             self.notify_listeners(Event::LowerBound);
         }
         if self.domain.get_ub() == x {
             self.notify_listeners(Event::UpperBound);
         }
-        if self.domain.remove(x) == DomainState::Modified {
-            self.notify_listeners(Event::Modified);
+        match self.domain.remove(x) {
+            DomainState::Modified => {
+                self.notify_listeners(Event::Modified);
+                return true;
+            }
+            DomainState::Failed => {
+                return false;
+            }
+            _ => {
+                return true;
+            }
         }
     }
     pub fn get_lb(&self) -> i64 {
@@ -57,16 +78,34 @@ impl Variable {
     pub fn get_ub(&self) -> i64 {
         self.domain.get_ub()
     }
-    pub fn set_lb(&mut self, x: i64) {
-        if self.domain.set_lb(x) == DomainState::Modified {
-            self.notify_listeners(Event::LowerBound);
-            self.notify_listeners(Event::Modified);
+    pub fn set_lb(&mut self, x: i64) -> bool {
+        match self.domain.set_lb(x) {
+            DomainState::Modified => {
+                self.notify_listeners(Event::LowerBound);
+                self.notify_listeners(Event::Modified);
+                return true;
+            }
+            DomainState::Failed => {
+                return false;
+            }
+            _ => {
+                return true;
+            }
         }
     }
-    pub fn set_ub(&mut self, x: i64) {
-        if self.domain.set_ub(x) == DomainState::Modified {
-            self.notify_listeners(Event::UpperBound);
-            self.notify_listeners(Event::Modified);
+    pub fn set_ub(&mut self, x: i64) -> bool {
+        match self.domain.set_ub(x) {
+            DomainState::Modified => {
+                self.notify_listeners(Event::UpperBound);
+                self.notify_listeners(Event::Modified);
+                return true;
+            }
+            DomainState::Failed => {
+                return false;
+            }
+            _ => {
+                return true;
+            }
         }
     }
     pub fn value(&self) -> i64 {

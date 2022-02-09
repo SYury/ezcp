@@ -101,11 +101,7 @@ impl BinPackingPropagator {
             assignment[k] = begin;
         }
         Self {
-            pcb: PropagatorControlBlock {
-                has_new_events: false,
-                queued: false,
-                id,
-            },
+            pcb: PropagatorControlBlock::new(id),
             assignment,
             load,
             weight,

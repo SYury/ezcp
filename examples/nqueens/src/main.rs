@@ -1,3 +1,11 @@
+/* This program solves the N queens puzzle.
+ *
+ * Input format:
+ * N (board side and number of queens)
+ *
+ * Output format:
+ * N pairs (row, column)
+ */
 use ezcp::alldifferent::AllDifferentConstraint;
 use ezcp::arithmetic::SimpleArithmeticConstraint;
 use ezcp::solver::Solver;
@@ -64,7 +72,7 @@ fn main() {
         let val = vars[i].borrow().value() as usize;
         let val_d1 = diag1[i].borrow().value() as usize;
         let val_d2 = (diag2[i].borrow().value() + n as i64) as usize;
-        println!("{} {} {} {}", i, val, val_d1, val_d2);
+        println!("{} {}", i, val);
         assert!(val + i == val_d1);
         assert!(val + n == val_d2 + i);
         assert!(!used[val]);

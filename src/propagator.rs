@@ -7,6 +7,16 @@ pub struct PropagatorControlBlock {
     pub id: usize,
 }
 
+impl PropagatorControlBlock {
+    pub fn new(id: usize) -> Self {
+        Self {
+            has_new_events: false,
+            queued: false,
+            id,
+        }
+    }
+}
+
 pub trait Propagator {
     fn listen(&self, self_pointer: Rc<RefCell<dyn Propagator>>);
 

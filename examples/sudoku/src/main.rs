@@ -1,3 +1,8 @@
+/* This program generates and solves sudoku.
+ * Technically speaking, generated puzzle is not a
+ * true sudoku since it may have more than one solution,
+ * but it is sufficient for demonstrating CP solution.
+ */
 use ezcp::alldifferent::AllDifferentConstraint;
 use ezcp::solver::Solver;
 use ezcp::value_selector::MinValueSelector;

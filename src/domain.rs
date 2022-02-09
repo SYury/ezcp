@@ -17,6 +17,7 @@ pub trait Domain {
     fn assign(&mut self, x: i64) -> DomainState;
     fn is_assigned(&self) -> bool;
     fn remove(&mut self, x: i64) -> DomainState;
+    fn possible(&self, x: i64) -> bool;
     fn get_lb(&self) -> i64;
     fn get_ub(&self) -> i64;
     fn set_lb(&mut self, x: i64) -> DomainState;
@@ -101,6 +102,15 @@ impl Domain for SmallDomain {
     fn is_assigned(&self) -> bool {
         self.body.count_ones() == 1
     }
+
+    fn possible(&self, x: i64) -> bool {
+        if x < self.start || x >= self.start + 64 {
+            return false;
+        }
+        let v = (x - self.start) as u8;
+        self.body & (1u64 << v) > 0
+    }
+
     fn remove(&mut self, x: i64) -> DomainState {
         if x < self.start || x >= self.start + 64 {
             return DomainState::Same;

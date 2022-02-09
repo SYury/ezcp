@@ -1,3 +1,10 @@
+/* This program solves bin packing problem.
+ *
+ * Single command line argument:
+ * path to file in BPP format (http://or.dei.unibo.it/library/bpplib)
+ * 
+ * Use sample.txt for example.
+ */
 use ezcp::binpacking::BinPackingConstraint;
 use ezcp::solver::{binary_search_optimizer, Solver};
 use ezcp::value_selector::MinValueSelector;
@@ -20,8 +27,6 @@ fn read_dataset(filename: &str) -> (Vec<i64>, i64) {
     (items, capacity)
 }
 
-// arguments: <file name in BPP format>
-// use sample.txt as example dataset
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let (items, capacity) = read_dataset(&args[1]);
