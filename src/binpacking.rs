@@ -169,7 +169,7 @@ fn bound(items: &Vec<i64>, capacity: i64) -> usize {
     h = (h + 1) / 2;
     let mut mx = 0;
     let mut lptr = 0;
-    let mut rptr = n - 1;
+    let mut rptr: i32 = (n as i32) - 1;
     let mut lsum = 0;
     let mut rsum = 0;
     let sum: i64 = items.iter().sum();
@@ -178,8 +178,8 @@ fn bound(items: &Vec<i64>, capacity: i64) -> usize {
             lsum += items[lptr];
             lptr += 1;
         }
-        while rptr >= big && items[rptr] < v {
-            rsum += items[rptr];
+        while rptr >= (big as i32) && items[rptr as usize] < v {
+            rsum += items[rptr as usize];
             rptr -= 1;
         }
         let mut curr = sum - lsum - rsum - capacity * ((big - lptr + h) as i64);

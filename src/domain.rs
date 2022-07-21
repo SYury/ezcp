@@ -118,6 +118,10 @@ impl Domain for SmallDomain {
         let v = (x - self.start) as u8;
         let modified = self.body & (1u64 << v) > 0;
         self.discard(v);
+        if self.body == 0 {
+            self.solver_state.borrow_mut().fail();
+            return DomainState::Failed;
+        }
         if v == self.lb && self.body > 0 {
             self.lb = self.body.trailing_zeros() as u8;
         }

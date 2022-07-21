@@ -7,6 +7,7 @@ pub mod domain;
 pub mod events;
 pub mod gcc;
 pub mod graph;
+pub mod linear;
 pub mod logic;
 pub mod objective_function;
 pub mod propagator;
