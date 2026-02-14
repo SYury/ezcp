@@ -4,7 +4,8 @@
  * but it is sufficient for demonstrating CP solution.
  */
 use ezcp::alldifferent::AllDifferentConstraint;
-use ezcp::solver::Solver;
+use ezcp::config::Config;
+use ezcp::solver::{SolutionStatus, Solver};
 use ezcp::value_selector::MinValueSelector;
 use ezcp::variable_selector::FirstFailVariableSelector;
 use std::boxed::Box;
@@ -15,17 +16,6 @@ const RNG_ADD: u64 = 11;
 
 fn rand(x: u64) -> u64 {
     (x * RNG_MUL + RNG_ADD) % RNG_MOD
-}
-
-fn read_int() -> u64 {
-    let mut input_line = String::new();
-    std::io::stdin()
-        .read_line(&mut input_line)
-        .expect("No input!");
-    input_line
-        .trim()
-        .parse()
-        .expect("Input is not a valid unsigned 64-bit integer!")
 }
 
 fn generate_board(max_transforms: usize, mut seed: u64) -> [[u8; 9]; 9] {
@@ -103,7 +93,11 @@ fn generate_mask(n_masked: usize, mut seed: u64) -> [[bool; 9]; 9] {
 }
 
 fn main() {
-    let seed = read_int();
+    let args: Vec<String> = std::env::args().collect();
+    if args.len() != 2 {
+        panic!("You must pass an unsigned 64-bit integer as a seed.");
+    }
+    let seed = args[1].parse::<u64>().expect("You must pass an unsigned 64-bit integer as a seed.");
     let board = generate_board(300, seed);
     let mask = generate_mask(50, seed);
     println!("Generated puzzle:");
@@ -119,8 +113,10 @@ fn main() {
         println!("{}", s);
     }
     let mut solver = Solver::new(
-        Box::new(FirstFailVariableSelector {}),
-        Box::new(MinValueSelector {}),
+        Config::new(
+            Box::new(MinValueSelector {}),
+            Box::new(FirstFailVariableSelector {}),
+        )
     );
     let mut vars = Vec::with_capacity(81);
     for i in 0..9 {
@@ -161,7 +157,7 @@ fn main() {
             solver.add_constraint(Box::new(AllDifferentConstraint::new(v)));
         }
     }
-    assert!(solver.solve());
+    assert!(solver.solve() == SolutionStatus::Feasible);
     println!("Solver found solution:");
     for i in 0..9 {
         let mut s = String::new();

@@ -1,3 +1,4 @@
+use crate::config::Config;
 use crate::constraint::Constraint;
 use crate::objective_function::ObjectiveFunction;
 use crate::propagator::Propagator;
@@ -34,6 +35,13 @@ impl SolverState {
     }
 }
 
+#[derive(PartialEq, Eq)]
+pub enum SolutionStatus {
+    Infeasible,
+    Feasible,
+    Optimal(i64),
+}
+
 pub struct Solver {
     constraints: Vec<Box<dyn Constraint>>,
     propagators: Vec<Rc<RefCell<dyn Propagator>>>,
@@ -49,15 +57,14 @@ pub struct Solver {
 
 impl Solver {
     pub fn new(
-        variable_selector: Box<dyn VariableSelector>,
-        value_selector: Box<dyn ValueSelector>,
+        config: Config,
     ) -> Self {
         Self {
             constraints: Vec::new(),
             propagators: Vec::new(),
             variables: Vec::new(),
-            variable_selector,
-            value_selector,
+            variable_selector: config.variable_selector,
+            value_selector: config.value_selector,
             state: Rc::new(RefCell::new(SolverState::new())),
             objective: None,
             current_min: i64::MAX,
@@ -240,14 +247,19 @@ impl Solver {
         found
     }
 
-    pub fn solve(&mut self) -> bool {
+    pub fn solve(&mut self) -> SolutionStatus {
         let res = self.search();
         if self.objective.is_some() && res {
             for (i, v) in self.variables.iter_mut().enumerate() {
                 v.borrow_mut().assign(self.best_solution[i]);
             }
+            return SolutionStatus::Optimal(self.objective.as_ref().unwrap().eval());
         }
-        res
+        if res {
+            SolutionStatus::Feasible
+        } else {
+            SolutionStatus::Infeasible
+        }
     }
 }
 
@@ -264,7 +276,7 @@ pub fn binary_search_optimizer(
     while r - l > 1 {
         let mid = (l + r) / 2;
         let mut solver = create_solver(mid);
-        if solver.solve() {
+        if solver.solve() != SolutionStatus::Infeasible {
             r = mid;
         } else {
             l = mid;

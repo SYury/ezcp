@@ -9,12 +9,13 @@
  * Output format:
  * [edge list] or infeasibility message
  */
+use ezcp::config::Config;
 use ezcp::constraint::Constraint;
 use ezcp::events::Event;
 use ezcp::gcc::GlobalCardinalityACPropagator;
 use ezcp::graph::TreeConstraint;
 use ezcp::propagator::{Propagator, PropagatorControlBlock};
-use ezcp::solver::Solver;
+use ezcp::solver::{SolutionStatus, Solver};
 use ezcp::value_selector::MinValueSelector;
 use ezcp::variable::Variable;
 use ezcp::variable_selector::FirstFailVariableSelector;
@@ -46,8 +47,8 @@ fn read_graph(scanner: &mut Scanner) -> Vec<Vec<usize>> {
     let edges = scanner.next::<usize>();
     let mut graph = vec![Vec::new(); vertices];
     for _ in 0..edges {
-        let v = scanner.next::<usize>();
-        let u = scanner.next::<usize>();
+        let v = scanner.next::<usize>() - 1;
+        let u = scanner.next::<usize>() - 1;
         graph[v].push(u);
         graph[u].push(v);
     }
@@ -149,8 +150,10 @@ fn main() {
     let n = g.len();
     let max_degree = scanner.next::<usize>();
     let mut solver = Solver::new(
-        Box::new(FirstFailVariableSelector {}),
-        Box::new(MinValueSelector {}),
+        Config::new(
+            Box::new(MinValueSelector {}),
+            Box::new(FirstFailVariableSelector {}),
+        )
     );
     let ntree = solver.new_variable(1, 1, format!("ntree"));
     let mut parent = Vec::with_capacity(n);
@@ -177,14 +180,14 @@ fn main() {
                 max_degree,
                 parent.clone(),
                 )));
-    if !solver.solve() {
+    if solver.solve() == SolutionStatus::Infeasible {
         println!("No spanning tree with degree <= {} found.", max_degree);
     } else {
         let mut root = n;
         for v in 0..n {
             let u = parent[v].borrow().value() as usize;
             if v != u {
-                println!("{} {}", v, u);
+                println!("{} {}", v + 1, u + 1);
             } else {
                 assert!(root == n);
                 root = v;

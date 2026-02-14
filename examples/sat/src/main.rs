@@ -5,8 +5,9 @@
  *
  * Use sample_satisfiable.cnf and sample_unsatisfiable.cnf for example (files taken from SATLIB: https://www.cs.ubc.ca/~hoos/SATLIB/benchm.html)
  */
+use ezcp::config::Config;
 use ezcp::logic::{AndConstraint, NegateConstraint, OrConstraint};
-use ezcp::solver::Solver;
+use ezcp::solver::{SolutionStatus, Solver};
 use ezcp::value_selector::MinValueSelector;
 use ezcp::variable_selector::FirstFailVariableSelector;
 use std::boxed::Box;
@@ -59,10 +60,15 @@ fn read_cnf_file(filename: &str) -> (usize, Vec<Vec<(usize, bool)>>) {
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
+    if args.len() != 2 {
+        panic!("You must provide a single argument: path to CNF file.");
+    }
     let (n_vars, clauses) = read_cnf_file(&args[1]);
     let mut solver = Solver::new(
-        Box::new(FirstFailVariableSelector {}),
-        Box::new(MinValueSelector {}),
+        Config::new(
+            Box::new(MinValueSelector {}),
+            Box::new(FirstFailVariableSelector {}),
+        )
     );
     let mut vars = Vec::with_capacity(n_vars);
     let mut negations = Vec::with_capacity(n_vars);
@@ -89,7 +95,7 @@ fn main() {
     }
     let sat_var = solver.new_variable(1, 1, format!("sat"));
     solver.add_constraint(Box::new(AndConstraint::new(sat_var.clone(), clause_vars.clone())));
-    if !solver.solve() {
+    if solver.solve() == SolutionStatus::Infeasible {
         println!("Unsatisfiable.");
     } else {
         println!("Satisfiable.");

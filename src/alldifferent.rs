@@ -418,7 +418,6 @@ impl Propagator for AllDifferentACPropagator {
             let mut scc = SCC::new(g);
             let mut edges = scc.get_bad_edges();
             for (val, i) in edges.drain(..) {
-                println!("removed {} from {}", m.vals[val - self.vars.len()], &self.vars[i].borrow().name);
                 self.vars[i]
                     .borrow_mut()
                     .remove(m.vals[val - self.vars.len()]);

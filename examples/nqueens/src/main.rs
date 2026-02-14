@@ -1,6 +1,6 @@
 /* This program solves the N queens puzzle.
  *
- * Input format:
+ * Command-line arguments:
  * N (board side and number of queens)
  *
  * Output format:
@@ -8,26 +8,23 @@
  */
 use ezcp::alldifferent::AllDifferentConstraint;
 use ezcp::arithmetic::SimpleArithmeticConstraint;
-use ezcp::solver::Solver;
+use ezcp::config::Config;
+use ezcp::solver::{SolutionStatus, Solver};
 use ezcp::value_selector::MinValueSelector;
 use ezcp::variable_selector::FirstFailVariableSelector;
 use std::boxed::Box;
-use std::io;
-
-fn read_int() -> usize {
-    let mut input_line = String::new();
-    io::stdin().read_line(&mut input_line).expect("No input!");
-    input_line
-        .trim()
-        .parse()
-        .expect("Input is not a valid unsigned integer!")
-}
 
 fn main() {
-    let n = read_int();
+    let args: Vec<String> = std::env::args().collect();
+    if args.len() != 2 {
+        panic!("You must provide a single integer argument: board side.");
+    }
+    let n = args[1].parse::<usize>().expect("You must provide a single integer argument: board side.");
     let mut solver = Solver::new(
-        Box::new(FirstFailVariableSelector {}),
-        Box::new(MinValueSelector {}),
+        Config::new(
+            Box::new(MinValueSelector {}),
+            Box::new(FirstFailVariableSelector {}),
+        )
     );
     let mut vars = Vec::with_capacity(n);
     let mut diag1 = Vec::with_capacity(n);
@@ -61,7 +58,7 @@ fn main() {
     solver.add_constraint(alldiff2);
     let alldiff3 = Box::new(AllDifferentConstraint::new(diag2.clone()));
     solver.add_constraint(alldiff3);
-    assert!(solver.solve());
+    assert!(solver.solve() == SolutionStatus::Feasible);
     let mut used = vec![false; n];
     let mut used_diag1 = vec![false; 2 * n];
     let mut used_diag2 = vec![false; 2 * n];

@@ -6,7 +6,8 @@
  * Use sample.txt for example.
  */
 use ezcp::binpacking::BinPackingConstraint;
-use ezcp::solver::{binary_search_optimizer, Solver};
+use ezcp::config::Config;
+use ezcp::solver::{binary_search_optimizer, SolutionStatus, Solver};
 use ezcp::value_selector::MinValueSelector;
 use ezcp::variable_selector::FirstFailVariableSelector;
 use std::boxed::Box;
@@ -29,11 +30,16 @@ fn read_dataset(filename: &str) -> (Vec<i64>, i64) {
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
+    if args.len() != 2 {
+        panic!("You must provide a single argument: path to BPP file.");
+    }
     let (items, capacity) = read_dataset(&args[1]);
     let create_solver = |bins: i64| {
         let mut solver = Solver::new(
-            Box::new(FirstFailVariableSelector {}),
-            Box::new(MinValueSelector {}),
+            Config::new(
+                Box::new(MinValueSelector {}),
+                Box::new(FirstFailVariableSelector {}),
+            )
         );
         let mut assignment = Vec::with_capacity(items.len());
         let mut load = Vec::with_capacity(bins as usize);

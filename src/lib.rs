@@ -2,6 +2,7 @@ pub mod alldifferent;
 pub mod arithmetic;
 pub mod binpacking;
 pub mod bitset;
+pub mod config;
 pub mod constraint;
 pub mod domain;
 pub mod events;
