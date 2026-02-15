@@ -41,11 +41,11 @@ impl LinearInequalityConstraint {
 impl Constraint for LinearInequalityConstraint {
     fn satisfied(&self) -> bool {
         let mut sum = 0;
-        for i in 0..self.x.len() {
-            if !self.x[i].borrow().is_assigned() {
+        for (x, a) in self.x.iter().zip(self.a.iter()) {
+            if !x.borrow().is_assigned() {
                 return false;
             }
-            sum += self.x[i].borrow().value() * self.a[i];
+            sum += x.borrow().value() * (*a);
         }
         sum <= self.b
     }
@@ -95,22 +95,25 @@ impl Propagator for LinearInequalityPropagator {
 
     fn propagate(&mut self) {
         let mut lower_sum = 0;
-        for i in 0..self.x.len() {
-            let x = self.x[i].borrow();
-            if self.a[i] > 0 {
-                lower_sum += x.get_lb() * self.a[i];
+        for (xx, a) in self.x.iter().zip(self.a.iter().copied()) {
+            let x = xx.borrow();
+            if a > 0 {
+                lower_sum += x.get_lb() * a;
             } else {
-                lower_sum += x.get_ub() * self.a[i];
+                lower_sum += x.get_ub() * a;
             }
         }
-        for i in 0..self.x.len() {
-            let mut x = self.x[i].borrow_mut();
-            if self.a[i] > 0 {
-                let up = self.b - lower_sum + x.get_lb() * self.a[i];
-                x.set_ub(floor_div(up, self.a[i]));
+        for (xx, a) in self.x.iter_mut().zip(self.a.iter().copied()) {
+            if a == 0 {
+                continue;
+            }
+            let mut x = xx.borrow_mut();
+            if a > 0 {
+                let up = self.b - lower_sum + x.get_lb() * a;
+                x.set_ub(floor_div(up, a));
             } else {
-                let down = -self.b + lower_sum - x.get_ub() * self.a[i];
-                x.set_lb(ceil_div(down, -self.a[i]));
+                let down = -self.b + lower_sum - x.get_ub() * a;
+                x.set_lb(ceil_div(down, -a));
             }
         }
     }
@@ -123,7 +126,7 @@ impl Propagator for LinearInequalityPropagator {
         &mut self.pcb
     }
 
-    fn is_idemponent(&self) -> bool {
+    fn is_idempotent(&self) -> bool {
         true
     }
 }

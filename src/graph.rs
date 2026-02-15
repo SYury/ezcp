@@ -319,7 +319,7 @@ impl Propagator for TreePropagator {
         &mut self.pcb
     }
 
-    fn is_idemponent(&self) -> bool {
+    fn is_idempotent(&self) -> bool {
         true
     }
 }

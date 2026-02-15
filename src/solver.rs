@@ -168,7 +168,7 @@ impl Solver {
                 }
                 return false;
             }
-            if self.state.borrow().resched_current && !p.borrow().is_idemponent() {
+            if self.state.borrow().resched_current && !p.borrow().is_idempotent() {
                 self.state
                     .borrow_mut()
                     .propagation_queue
@@ -209,6 +209,12 @@ impl Solver {
             }
         }
         if vars.is_empty() {
+            if !self.check_solution() {
+                for v in &mut self.variables {
+                    v.borrow_mut().rollback();
+                }
+                return false;
+            }
             if let Some(objective) = &self.objective {
                 let val = objective.eval();
                 if val < self.current_min {
@@ -290,9 +296,11 @@ impl Solver {
             for (i, v) in self.variables.iter_mut().enumerate() {
                 v.borrow_mut().assign(self.best_solution[i]);
             }
+            assert!(self.check_solution());
             return SolutionStatus::Optimal(self.objective.as_ref().unwrap().eval());
         }
         if res {
+            assert!(self.check_solution());
             SolutionStatus::Feasible
         } else {
             SolutionStatus::Infeasible

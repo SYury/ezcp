@@ -119,7 +119,7 @@ impl Propagator for GlobalCardinalityACPropagator {
         &mut self.pcb
     }
 
-    fn is_idemponent(&self) -> bool {
+    fn is_idempotent(&self) -> bool {
         true
     }
 }

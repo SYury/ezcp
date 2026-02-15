@@ -1,3 +1,5 @@
+use ezcp::alldifferent::AllDifferentConstraint;
+use ezcp::binpacking::BinPackingConstraint;
 use ezcp::config::Config;
 use ezcp::linear::LinearInequalityConstraint;
 use ezcp::logic::{AndConstraint, NegateConstraint, OrConstraint};
@@ -8,12 +10,89 @@ use ezcp::variable::Variable;
 use ezcp::variable_selector::FirstFailVariableSelector;
 use std::boxed::Box;
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::rc::Rc;
 
 pub struct MinizincParseResult {
     pub solver: Solver,
     pub output: Vec<String>,
+}
+
+fn int_array_or_ref(
+    json: &serde_json::Value,
+    arrays: &HashMap<String, Vec<i64>>,
+) -> Result<Vec<i64>, String> {
+    if let Some(s) = json.as_str() {
+        if let Some(arr) = arrays.get(s) {
+            Ok(arr.to_vec())
+        } else {
+            Err(format!("references array {}, but it doesn't exist.", s))
+        }
+    } else if let Some(arr) = json.as_array() {
+        if arr.iter().any(|x| !x.is_i64()) {
+            return Err("not a string or int array.".to_string());
+        }
+        Ok(arr.iter().map(|x| x.as_i64().unwrap()).collect::<Vec<_>>())
+    } else {
+        Err("not a string or int array.".to_string())
+    }
+}
+
+fn var_array_or_ref(
+    json: &serde_json::Value,
+    arrays: &HashMap<String, Vec<String>>,
+    vars: &HashMap<String, Rc<RefCell<Variable>>>,
+) -> Result<Vec<Rc<RefCell<Variable>>>, String> {
+    if let Some(s) = json.as_str() {
+        if let Some(arr) = arrays.get(s) {
+            if let Some(x) = arr.iter().find(|x| !vars.contains_key(*x)) {
+                return Err(format!("references variable {}, but it doesn't exist", x));
+            }
+            Ok(arr
+                .iter()
+                .map(|x| vars.get(x).unwrap().clone())
+                .collect::<Vec<_>>())
+        } else {
+            Err(format!("references array {}, but it doesn't exist.", s))
+        }
+    } else if let Some(arr) = json.as_array() {
+        if arr.iter().any(|x| !x.is_string()) {
+            return Err("not a string or string array.".to_string());
+        }
+        let names = arr
+            .iter()
+            .map(|x| x.as_str().unwrap())
+            .collect::<Vec<&str>>();
+        if let Some(x) = names.iter().find(|x| !vars.contains_key(**x)) {
+            return Err(format!("references variable {}, but it doesn't exist", x));
+        }
+        Ok(names
+            .iter()
+            .map(|x| vars.get(*x).unwrap().clone())
+            .collect::<Vec<_>>())
+    } else {
+        Err("not a string or string array.".to_string())
+    }
+}
+
+fn var_array(
+    arr: &[serde_json::Value],
+    vars: &HashMap<String, Rc<RefCell<Variable>>>,
+) -> Result<Vec<Rc<RefCell<Variable>>>, String> {
+    if arr.iter().any(|x| !x.is_string()) {
+        return Err("not a string array.".to_string());
+    }
+    let names = arr
+        .iter()
+        .map(|x| x.as_str().unwrap())
+        .collect::<Vec<&str>>();
+    if let Some(x) = names.iter().find(|x| !vars.contains_key(**x)) {
+        return Err(format!("references variable {}, but it doesn't exist", x));
+    }
+    Ok(names
+        .iter()
+        .map(|x| vars.get(*x).unwrap().clone())
+        .collect::<Vec<_>>())
 }
 
 pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
@@ -23,8 +102,9 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
     ));
     let mut vars = HashMap::<String, Rc<RefCell<Variable>>>::new();
     let mut arrays = HashMap::<String, Vec<i64>>::new();
-    let mut skipped_arrays = HashSet::<String>::new();
+    let mut string_arrays = HashMap::<String, Vec<String>>::new();
     let output: Vec<String>;
+
     if let Some(var_json0) = json.get("variables") {
         if let Some(var_json) = var_json0.as_object() {
             for (name, var) in var_json.iter() {
@@ -126,14 +206,19 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                 .unwrap()
                 .as_array()
                 .ok_or_else(|| format!("field 'a' of array {} is not an array.", name))?;
-            if a.is_empty() || a.iter().any(|x| !x.is_i64()) {
-                skipped_arrays.insert(name.clone());
-                continue;
+            if !a.is_empty() && a.iter().all(|x| x.is_i64()) {
+                arrays.insert(
+                    name.clone(),
+                    a.iter().map(|x| x.as_i64().unwrap()).collect::<Vec<_>>(),
+                );
+            } else if !a.is_empty() && a.iter().all(|x| x.is_string()) {
+                string_arrays.insert(
+                    name.clone(),
+                    a.iter()
+                        .map(|x| x.as_str().unwrap().to_string())
+                        .collect::<Vec<_>>(),
+                );
             }
-            arrays.insert(
-                name.clone(),
-                a.iter().map(|x| x.as_i64().unwrap()).collect::<Vec<_>>(),
-            );
         }
     } else {
         return Err("missing required field 'arrays'.".to_string());
@@ -164,7 +249,7 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                 {
                     return Err("Flatzinc not implemented error: float constraints are currently unsupported.".to_string());
                 }
-                if id.ends_with("_reif") {
+                if id.ends_with("_reif") && id != "bool_clause_reif" {
                     return Err("Flatzinc not implemented error: reified constraints are currently unsupported.".to_string());
                 }
                 let mut success = false;
@@ -176,58 +261,10 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                             args.len()
                         ));
                     }
-                    let arr = if let Some(arr_id) = args[0].as_str() {
-                        if skipped_arrays.contains(arr_id) {
-                            return Err(format!(
-                                "array {} used in {} constraint is not integer.",
-                                arr_id, id
-                            ));
-                        }
-                        if !arrays.contains_key(arr_id) {
-                            return Err(format!(
-                                "{} constraint uses unknown array {}.",
-                                id, arr_id
-                            ));
-                        }
-                        arrays.get(arr_id).unwrap().to_vec()
-                    } else if let Some(arr) = args[0].as_array() {
-                        if arr.iter().any(|a| !a.is_i64()) {
-                            return Err(format!(
-                                "coefficient array of constraint {} contains non-integer values.",
-                                id
-                            ));
-                        }
-                        arr.iter()
-                            .map(|a| a.as_i64().unwrap())
-                            .collect::<Vec<i64>>()
-                    } else {
-                        return Err(format!(
-                            "first argument to constraint {} is not a string or array",
-                            id
-                        ));
-                    };
-                    let varnames = args[1]
-                        .as_array()
-                        .and_then(|a| {
-                            if a.iter().any(|x| !x.is_string()) {
-                                None
-                            } else {
-                                Some(a.iter().map(|x| x.as_str().unwrap()).collect::<Vec<_>>())
-                            }
-                        })
-                        .ok_or_else(|| {
-                            format!(
-                                "second argument to constraint {} is not an array of strings.",
-                                id
-                            )
-                        })?;
-                    if let Some(s) = varnames.iter().find(|s| !vars.contains_key(**s)) {
-                        return Err(format!("{} constraint has unknown variable {}.", id, s));
-                    }
-                    let cvars = varnames
-                        .iter()
-                        .map(|s| vars.get(*s).unwrap().clone())
-                        .collect::<Vec<_>>();
+                    let arr = int_array_or_ref(&args[0], &arrays)
+                        .map_err(|s| format!("coefficient array of constraint {}: {}", id, s))?;
+                    let cvars = var_array_or_ref(&args[1], &string_arrays, &vars)
+                        .map_err(|s| format!("variable array of constraint {}: {}", id, s))?;
                     let bound = args[2].as_i64().ok_or_else(|| {
                         format!("non-integer third argument to constraint {}", id)
                     })?;
@@ -241,7 +278,7 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                             )));
                             solver.add_constraint(Box::new(LinearInequalityConstraint::new(
                                 cvars,
-                                arr.iter().map(|x| -*x).collect::<Vec<_>>(),
+                                arr.into_iter().map(|x| -x).collect::<Vec<_>>(),
                                 -bound,
                             )));
                         }
@@ -263,6 +300,42 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                 }
                 if !success {
                     match id {
+                        "ezcp_alldifferent" => {
+                            if args.len() != 1 {
+                                return Err(format!(
+                                    "constraint {} has {} arguments instead of 2.",
+                                    id,
+                                    args.len()
+                                ));
+                            }
+                            let cvars =
+                                var_array_or_ref(&args[0], &string_arrays, &vars).map_err(|s| {
+                                    format!("variable array of constraint {}: {}", id, s)
+                                })?;
+                            solver.add_constraint(Box::new(AllDifferentConstraint::new(cvars)));
+                        }
+                        "ezcp_bin_packing" => {
+                            if args.len() != 3 {
+                                return Err(format!(
+                                    "constraint {} has {} arguments instead of 3.",
+                                    id,
+                                    args.len()
+                                ));
+                            }
+                            let cvars0 = var_array_or_ref(&args[0], &string_arrays, &vars)
+                                .map_err(|s| {
+                                    format!("load variables of constraint {}: {}", id, s)
+                                })?;
+                            let cvars1 = var_array_or_ref(&args[1], &string_arrays, &vars)
+                                .map_err(|s| {
+                                    format!("bin variables of constraint {}: {}", id, s)
+                                })?;
+                            let w = int_array_or_ref(&args[2], &arrays)
+                                .map_err(|s| format!("weight array of constraint {}: {}", id, s))?;
+                            solver.add_constraint(Box::new(BinPackingConstraint::new(
+                                cvars1, cvars0, w,
+                            )));
+                        }
                         "int_eq" | "bool_eq" | "bool2int" => {
                             if args.len() != 2 {
                                 return Err(format!(
@@ -271,24 +344,8 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                                     args.len()
                                 ));
                             }
-                            if args.iter().any(|x| !x.is_string()) {
-                                return Err(format!(
-                                    "{} constraint has non-string variable name!",
-                                    id
-                                ));
-                            }
-                            let varnames =
-                                args.iter().map(|x| x.as_str().unwrap()).collect::<Vec<_>>();
-                            if let Some(s) = varnames.iter().find(|s| !vars.contains_key(**s)) {
-                                return Err(format!(
-                                    "{} constraint has unknown variable {}.",
-                                    id, s
-                                ));
-                            }
-                            let cvars = varnames
-                                .iter()
-                                .map(|s| vars.get(*s).unwrap().clone())
-                                .collect::<Vec<_>>();
+                            let cvars = var_array(args, &vars)
+                                .map_err(|s| format!("variables of constraint {}: {}", id, s))?;
                             solver.add_constraint(Box::new(LinearInequalityConstraint::new(
                                 cvars.clone(),
                                 vec![1, -1],
@@ -308,24 +365,8 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                                     args.len()
                                 ));
                             }
-                            if args.iter().any(|x| !x.is_string()) {
-                                return Err(format!(
-                                    "{} constraint has non-string variable name!",
-                                    id
-                                ));
-                            }
-                            let varnames =
-                                args.iter().map(|x| x.as_str().unwrap()).collect::<Vec<_>>();
-                            if let Some(s) = varnames.iter().find(|s| !vars.contains_key(**s)) {
-                                return Err(format!(
-                                    "{} constraint has unknown variable {}.",
-                                    id, s
-                                ));
-                            }
-                            let cvars = varnames
-                                .iter()
-                                .map(|s| vars.get(*s).unwrap().clone())
-                                .collect::<Vec<_>>();
+                            let cvars = var_array(args, &vars)
+                                .map_err(|s| format!("variables of constraint {}: {}", id, s))?;
                             solver.add_constraint(Box::new(LinearInequalityConstraint::new(
                                 cvars,
                                 vec![1, -1],
@@ -340,24 +381,8 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                                     args.len()
                                 ));
                             }
-                            if args.iter().any(|x| !x.is_string()) {
-                                return Err(format!(
-                                    "{} constraint has non-string variable name!",
-                                    id
-                                ));
-                            }
-                            let varnames =
-                                args.iter().map(|x| x.as_str().unwrap()).collect::<Vec<_>>();
-                            if let Some(s) = varnames.iter().find(|s| !vars.contains_key(**s)) {
-                                return Err(format!(
-                                    "{} constraint has unknown variable {}.",
-                                    id, s
-                                ));
-                            }
-                            let cvars = varnames
-                                .iter()
-                                .map(|s| vars.get(*s).unwrap().clone())
-                                .collect::<Vec<_>>();
+                            let cvars = var_array(args, &vars)
+                                .map_err(|s| format!("variables of constraint {}: {}", id, s))?;
                             solver.add_constraint(Box::new(LinearInequalityConstraint::new(
                                 cvars,
                                 vec![1, -1],
@@ -372,24 +397,8 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                                     args.len()
                                 ));
                             }
-                            if args.iter().any(|x| !x.is_string()) {
-                                return Err(format!(
-                                    "{} constraint has non-string variable name!",
-                                    id
-                                ));
-                            }
-                            let varnames =
-                                args.iter().map(|x| x.as_str().unwrap()).collect::<Vec<_>>();
-                            if let Some(s) = varnames.iter().find(|s| !vars.contains_key(**s)) {
-                                return Err(format!(
-                                    "{} constraint has unknown variable {}.",
-                                    id, s
-                                ));
-                            }
-                            let cvars = varnames
-                                .iter()
-                                .map(|s| vars.get(*s).unwrap().clone())
-                                .collect::<Vec<_>>();
+                            let cvars = var_array(args, &vars)
+                                .map_err(|s| format!("variables of constraint {}: {}", id, s))?;
                             solver.add_constraint(Box::new(LinearInequalityConstraint::new(
                                 cvars.clone(),
                                 vec![1, 1, -1],
@@ -409,24 +418,8 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                                     args.len()
                                 ));
                             }
-                            if args.iter().any(|x| !x.is_string()) {
-                                return Err(format!(
-                                    "{} constraint has non-string variable name!",
-                                    id
-                                ));
-                            }
-                            let varnames =
-                                args.iter().map(|x| x.as_str().unwrap()).collect::<Vec<_>>();
-                            if let Some(s) = varnames.iter().find(|s| !vars.contains_key(**s)) {
-                                return Err(format!(
-                                    "{} constraint has unknown variable {}.",
-                                    id, s
-                                ));
-                            }
-                            let cvars = varnames
-                                .iter()
-                                .map(|s| vars.get(*s).unwrap().clone())
-                                .collect::<Vec<_>>();
+                            let cvars = var_array(args, &vars)
+                                .map_err(|s| format!("variables of constraint {}: {}", id, s))?;
                             solver.add_constraint(Box::new(NegateConstraint::new(
                                 cvars[0].clone(),
                                 cvars[1].clone(),
@@ -440,24 +433,8 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                                     args.len()
                                 ));
                             }
-                            if args.iter().any(|x| !x.is_string()) {
-                                return Err(format!(
-                                    "{} constraint has non-string variable name!",
-                                    id
-                                ));
-                            }
-                            let varnames =
-                                args.iter().map(|x| x.as_str().unwrap()).collect::<Vec<_>>();
-                            if let Some(s) = varnames.iter().find(|s| !vars.contains_key(**s)) {
-                                return Err(format!(
-                                    "{} constraint has unknown variable {}.",
-                                    id, s
-                                ));
-                            }
-                            let cvars = varnames
-                                .iter()
-                                .map(|s| vars.get(*s).unwrap().clone())
-                                .collect::<Vec<_>>();
+                            let cvars = var_array(args, &vars)
+                                .map_err(|s| format!("variables of constraint {}: {}", id, s))?;
                             solver.add_constraint(Box::new(AndConstraint::new(
                                 cvars[2].clone(),
                                 cvars[..2].to_vec(),
@@ -471,59 +448,27 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                                     args.len()
                                 ));
                             }
-                            if args.iter().any(|x| !x.is_string()) {
-                                return Err(format!(
-                                    "{} constraint has non-string variable name!",
-                                    id
-                                ));
-                            }
-                            let varnames =
-                                args.iter().map(|x| x.as_str().unwrap()).collect::<Vec<_>>();
-                            if let Some(s) = varnames.iter().find(|s| !vars.contains_key(**s)) {
-                                return Err(format!(
-                                    "{} constraint has unknown variable {}.",
-                                    id, s
-                                ));
-                            }
-                            let cvars = varnames
-                                .iter()
-                                .map(|s| vars.get(*s).unwrap().clone())
-                                .collect::<Vec<_>>();
+                            let cvars = var_array(args, &vars)
+                                .map_err(|s| format!("variables of constraint {}: {}", id, s))?;
                             solver.add_constraint(Box::new(OrConstraint::new(
                                 cvars[2].clone(),
                                 cvars[..2].to_vec(),
                             )));
                         }
-                        "bool_clause" => {
-                            if args.len() != 2 {
+                        "bool_clause" | "bool_clause_reif" => {
+                            let need_args = if id == "bool_clause" { 2 } else { 3 };
+                            if args.len() != need_args {
                                 return Err(format!(
-                                    "constraint {} has {} arguments instead of 2.",
+                                    "constraint {} has {} arguments instead of {}.",
                                     id,
-                                    args.len()
+                                    args.len(),
+                                    need_args
                                 ));
                             }
-                            let varnames0 = args[0].as_array().and_then(|a| if a.iter().any(|x| !x.is_string()) { None } else { Some(a.iter().map(|x| x.as_str().unwrap()).collect::<Vec<_>>()) }).ok_or_else(|| format!("second argument to constraint {} is not an array of strings.", id))?;
-                            if let Some(s) = varnames0.iter().find(|s| !vars.contains_key(**s)) {
-                                return Err(format!(
-                                    "{} constraint has unknown variable {}.",
-                                    id, s
-                                ));
-                            }
-                            let cvars0 = varnames0
-                                .iter()
-                                .map(|s| vars.get(*s).unwrap().clone())
-                                .collect::<Vec<_>>();
-                            let varnames1 = args[1].as_array().and_then(|a| if a.iter().any(|x| !x.is_string()) { None } else { Some(a.iter().map(|x| x.as_str().unwrap()).collect::<Vec<&str>>()) }).ok_or_else(|| format!("second argument to constraint {} is not an array of strings.", id))?;
-                            if let Some(s) = varnames1.iter().find(|s| !vars.contains_key(**s)) {
-                                return Err(format!(
-                                    "{} constraint has unknown variable {}.",
-                                    id, s
-                                ));
-                            }
-                            let cvars1 = varnames1
-                                .iter()
-                                .map(|s| vars.get(*s).unwrap().clone())
-                                .collect::<Vec<_>>();
+                            let cvars0 = var_array_or_ref(&args[0], &string_arrays, &vars)
+                                .map_err(|s| format!("variables of constraint {}: {}", id, s))?;
+                            let cvars1 = var_array_or_ref(&args[1], &string_arrays, &vars)
+                                .map_err(|s| format!("variables of constraint {}: {}", id, s))?;
                             let mut cvars2 = Vec::with_capacity(cvars0.len() + cvars1.len());
                             cvars2.extend_from_slice(&cvars0);
                             for v in &cvars1 {
@@ -535,8 +480,20 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                                 )));
                                 cvars2.push(u);
                             }
-                            let alwaysone = solver.new_variable(1, 1, "alwaysone".to_string());
-                            solver.add_constraint(Box::new(OrConstraint::new(alwaysone, cvars2)));
+                            let reif = if id == "bool_clause" {
+                                solver.new_variable(1, 1, "alwaysone".to_string())
+                            } else {
+                                let varname = args[2].as_str().ok_or_else(|| {
+                                    format!(
+                                        "reified variable name for constraint {} is not a string",
+                                        id
+                                    )
+                                })?;
+                                vars.get(varname).cloned().ok_or_else(|| {
+                                    format!("{} constraint has unknown variable {}.", id, varname)
+                                })?
+                            };
+                            solver.add_constraint(Box::new(OrConstraint::new(reif, cvars2)));
                         }
                         _ => {
                             return Err(format!("Flatzinc not implemented error: no implementation for constraint {}", id));

@@ -132,7 +132,7 @@ impl Propagator for AndPropagator {
         &mut self.pcb
     }
 
-    fn is_idemponent(&self) -> bool {
+    fn is_idempotent(&self) -> bool {
         true
     }
 }
@@ -260,7 +260,7 @@ impl Propagator for OrPropagator {
         &mut self.pcb
     }
 
-    fn is_idemponent(&self) -> bool {
+    fn is_idempotent(&self) -> bool {
         true
     }
 }
@@ -344,7 +344,7 @@ impl Propagator for NegatePropagator {
         &mut self.pcb
     }
 
-    fn is_idemponent(&self) -> bool {
+    fn is_idempotent(&self) -> bool {
         true
     }
 }
