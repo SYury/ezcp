@@ -45,10 +45,10 @@ fn test_optimization() {
     solver.add_constraint(ad);
     for i in 0..9 {
         solver.add_constraint(Box::new(LinearInequalityConstraint::new(
-                    vec![vars[i].clone(), vars[i + 1].clone()],
-                    vec![1, -1],
-                    0,
-                    )));
+            vec![vars[i].clone(), vars[i + 1].clone()],
+            vec![1, -1],
+            0,
+        )));
     }
     let obj = Box::new(SumObjective { vars });
     solver.add_objective(obj);

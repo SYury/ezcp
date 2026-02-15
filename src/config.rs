@@ -7,8 +7,14 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn new(value_selector: Box<dyn ValueSelector>, variable_selector: Box<dyn VariableSelector>) -> Self {
-        Self {value_selector, variable_selector}
+    pub fn new(
+        value_selector: Box<dyn ValueSelector>,
+        variable_selector: Box<dyn VariableSelector>,
+    ) -> Self {
+        Self {
+            value_selector,
+            variable_selector,
+        }
     }
 }
 

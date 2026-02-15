@@ -24,12 +24,10 @@ impl Constraint for SimpleArithmeticConstraint {
     fn satisfied(&self) -> bool {
         if !self.x.borrow().is_assigned() || !self.y.borrow().is_assigned() {
             false
+        } else if self.plus {
+            self.x.borrow().value() + self.y.borrow().value() == self.c
         } else {
-            if self.plus {
-                self.x.borrow().value() + self.y.borrow().value() == self.c
-            } else {
-                self.x.borrow().value() - self.y.borrow().value() == self.c
-            }
+            self.x.borrow().value() - self.y.borrow().value() == self.c
         }
     }
 
@@ -140,10 +138,10 @@ impl Propagator for SimpleArithmeticPropagator {
                     }
                 }
             }
-            while let Some(rem_x) = it_x.next() {
+            for rem_x in it_x {
                 self.x.borrow_mut().remove(rem_x);
             }
-            while let Some(rem_y) = it_y.next() {
+            for rem_y in it_y {
                 self.y.borrow_mut().remove(rem_y);
             }
         } else {
@@ -194,10 +192,10 @@ impl Propagator for SimpleArithmeticPropagator {
                     }
                 }
             }
-            while let Some(rem_x) = it_x.next() {
+            for rem_x in it_x {
                 self.x.borrow_mut().remove(rem_x);
             }
-            while let Some(rem_y) = it_y.next() {
+            for rem_y in it_y {
                 self.y.borrow_mut().remove(rem_y);
             }
         }

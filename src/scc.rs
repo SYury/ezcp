@@ -26,14 +26,14 @@ pub fn compute_scc(gr: &Vec<Vec<usize>>) -> Vec<Vec<usize>> {
     let mut grt = vec![Vec::new(); n];
     let mut order = Vec::with_capacity(n);
     let mut used = vec![false; n];
-    for v in 0..n {
-        for u in gr[v].iter().cloned() {
+    for (v, row) in gr.iter().enumerate() {
+        for u in row.iter().cloned() {
             grt[u].push(v);
         }
     }
     for v in 0..n {
         if !used[v] {
-            calc_order(v, &gr, &mut used, &mut order);
+            calc_order(v, gr, &mut used, &mut order);
         }
     }
     order.reverse();

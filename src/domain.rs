@@ -59,15 +59,15 @@ impl Iterator for SmallDomainIterator {
 
 impl SmallDomain {
     fn discard(&mut self, x: u8) {
-        self.body &= !((1 as u64) << x);
+        self.body &= !(1_u64 << x);
     }
 }
 
 impl Domain for SmallDomain {
     fn new(solver_state: Rc<RefCell<SolverState>>, lb: i64, ub: i64) -> Self {
         let body = match ub - lb {
-            63 => !(0 as u64),
-            _ => ((1 as u64) << (ub - lb + 1)) - 1,
+            63 => !0_u64,
+            _ => (1_u64 << (ub - lb + 1)) - 1,
         };
         Self {
             solver_state,
@@ -84,12 +84,12 @@ impl Domain for SmallDomain {
             return DomainState::Failed;
         }
         let v = (x - self.start) as u8;
-        if (self.body & ((1 as u64) << v)) == 0 {
+        if (self.body & (1_u64 << v)) == 0 {
             self.solver_state.borrow_mut().fail();
             DomainState::Failed
         } else {
-            let modified = self.body != (1 as u64) << v;
-            self.body = (1 as u64) << v;
+            let modified = self.body != 1_u64 << v;
+            self.body = 1_u64 << v;
             self.lb = v;
             self.ub = v;
             if modified {
@@ -205,8 +205,8 @@ impl Domain for SmallDomain {
     }
     fn iter(&self) -> Box<dyn Iterator<Item = i64> + '_> {
         Box::new(SmallDomainIterator {
-            body: self.body.clone(),
-            start: self.start.clone(),
+            body: self.body,
+            start: self.start,
         })
     }
     fn size(&self) -> u64 {

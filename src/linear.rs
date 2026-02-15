@@ -9,18 +9,18 @@ use std::rc::Rc;
 // assuming q > 0
 fn floor_div(p: i64, q: i64) -> i64 {
     if p > 0 {
-        p/q
+        p / q
     } else {
-        -((-p + q - 1)/q)
+        -((-p + q - 1) / q)
     }
 }
 
 // assuming q > 0
 fn ceil_div(p: i64, q: i64) -> i64 {
     if p > 0 {
-        (p + q - 1)/q
+        (p + q - 1) / q
     } else {
-        -((-p)/q)
+        -((-p) / q)
     }
 }
 
@@ -34,11 +34,7 @@ pub struct LinearInequalityConstraint {
 impl LinearInequalityConstraint {
     pub fn new(x: Vec<Rc<RefCell<Variable>>>, a: Vec<i64>, b: i64) -> Self {
         assert!(x.len() == a.len());
-        Self {
-            x,
-            a,
-            b,
-        }
+        Self { x, a, b }
     }
 }
 

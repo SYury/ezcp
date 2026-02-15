@@ -7,7 +7,7 @@ use crate::variable::Variable;
 use crate::variable_selector::VariableSelector;
 use std::boxed::Box;
 use std::cell::RefCell;
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
 
 pub struct SolverState {
@@ -46,6 +46,7 @@ pub struct Solver {
     constraints: Vec<Box<dyn Constraint>>,
     propagators: Vec<Rc<RefCell<dyn Propagator>>>,
     variables: Vec<Rc<RefCell<Variable>>>,
+    vars_by_name: HashMap<String, Rc<RefCell<Variable>>>,
     variable_selector: Box<dyn VariableSelector>,
     value_selector: Box<dyn ValueSelector>,
     state: Rc<RefCell<SolverState>>,
@@ -56,13 +57,12 @@ pub struct Solver {
 }
 
 impl Solver {
-    pub fn new(
-        config: Config,
-    ) -> Self {
+    pub fn new(config: Config) -> Self {
         Self {
             constraints: Vec::new(),
             propagators: Vec::new(),
             variables: Vec::new(),
+            vars_by_name: HashMap::new(),
             variable_selector: config.variable_selector,
             value_selector: config.value_selector,
             state: Rc::new(RefCell::new(SolverState::new())),
@@ -92,15 +92,52 @@ impl Solver {
         self.propagator_id_ctr += 1;
         id
     }
+    /// creates a new variable or returns an existing variable if a variable with the same name exists
     pub fn new_variable(&mut self, lb: i64, ub: i64, name: String) -> Rc<RefCell<Variable>> {
+        if let Some(var) = self.vars_by_name.get(&name) {
+            return var.clone();
+        }
+        self.new_var_inner(lb, ub, name)
+    }
+    /// creates a new variable or returns an existing variable if a variable with the same name exists
+    /// if a variable with the same name exists, checks for the same lb/ub
+    pub fn new_variable_strict(
+        &mut self,
+        lb: i64,
+        ub: i64,
+        name: String,
+    ) -> Option<Rc<RefCell<Variable>>> {
+        if let Some(var) = self.vars_by_name.get(&name) {
+            if var.borrow().get_lb() != lb || var.borrow().get_ub() != ub {
+                return None;
+            }
+            return Some(var.clone());
+        }
+        Some(self.new_var_inner(lb, ub, name))
+    }
+    /// creates a new variable, additionally replacing an existing variable if a variable with the same name exists
+    /// WARNING: replacing variables used in existing constraints is a very bad idea
+    pub fn new_variable_with_replace(
+        &mut self,
+        lb: i64,
+        ub: i64,
+        name: String,
+    ) -> Rc<RefCell<Variable>> {
+        self.new_var_inner(lb, ub, name)
+    }
+    fn new_var_inner(&mut self, lb: i64, ub: i64, name: String) -> Rc<RefCell<Variable>> {
         let var = Rc::new(RefCell::new(Variable::new(
             self.state.clone(),
             lb,
             ub,
-            name,
+            name.clone(),
         )));
         self.variables.push(var.clone());
+        self.vars_by_name.insert(name, var.clone());
         var
+    }
+    pub fn get_variable_by_name(&self, name: &str) -> Option<Rc<RefCell<Variable>>> {
+        self.vars_by_name.get(name).cloned()
     }
     pub fn check_solution(&self) -> bool {
         for c in &self.constraints {
@@ -145,15 +182,15 @@ impl Solver {
     fn search(&mut self) -> bool {
         #[cfg(debug_assertions)]
         if self.objective.is_some() {
-            println!("current best objective = {}", self.current_min);
+            eprintln!("current best objective = {}", self.current_min);
         }
         #[cfg(debug_assertions)]
         for v in self.variables.iter() {
-            print!("VAR {}", v.borrow().name);
+            eprint!("VAR {}", v.borrow().name);
             for val in v.borrow().iter() {
-                print!(" {}", val);
+                eprint!(" {}", val);
             }
-            println!("");
+            eprintln!();
         }
         for v in &mut self.variables {
             v.borrow_mut().checkpoint();
@@ -207,7 +244,7 @@ impl Solver {
             while !Rc::ptr_eq(&self.variables[i], &v) {
                 i += 1;
             }
-            println!("fixed value {} for variable {}", x, i);
+            eprintln!("fixed value {} for variable {}", x, i);
         }
         v.borrow_mut().assign(x);
         let mut found = false;
@@ -219,7 +256,7 @@ impl Solver {
             }
         }
         #[cfg(debug_assertions)]
-        println!("returned after assignment");
+        eprintln!("returned after assignment");
         v.borrow_mut().rollback();
         v.borrow_mut().checkpoint();
         v.borrow_mut().remove(x);
@@ -229,7 +266,7 @@ impl Solver {
             while !Rc::ptr_eq(&self.variables[i], &v) {
                 i += 1;
             }
-            println!("removed value {} from variable {}", x, i);
+            eprintln!("removed value {} from variable {}", x, i);
         }
         if self.search() {
             if self.objective.is_none() {
@@ -239,7 +276,7 @@ impl Solver {
             }
         }
         #[cfg(debug_assertions)]
-        println!("returned after removal");
+        eprintln!("returned after removal");
         v.borrow_mut().rollback();
         for v in &mut self.variables {
             v.borrow_mut().rollback();

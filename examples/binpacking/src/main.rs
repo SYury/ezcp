@@ -7,7 +7,7 @@
  */
 use ezcp::binpacking::BinPackingConstraint;
 use ezcp::config::Config;
-use ezcp::solver::{binary_search_optimizer, SolutionStatus, Solver};
+use ezcp::solver::{binary_search_optimizer, Solver};
 use ezcp::value_selector::MinValueSelector;
 use ezcp::variable_selector::FirstFailVariableSelector;
 use std::boxed::Box;

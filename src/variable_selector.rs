@@ -20,8 +20,8 @@ impl VariableSelector for FirstFailVariableSelector {
     fn select(&self, vars: Vec<Rc<RefCell<Variable>>>) -> Rc<RefCell<Variable>> {
         let mut pos = 0;
         let mut best_size = vars[0].borrow().size();
-        for i in 1..vars.len() {
-            let size = vars[i].borrow().size();
+        for (i, v) in vars.iter().enumerate().skip(1) {
+            let size = v.borrow().size();
             if size < best_size {
                 pos = i;
                 best_size = size;

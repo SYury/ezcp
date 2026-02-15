@@ -33,14 +33,10 @@ impl Variable {
             DomainState::Modified => {
                 self.notify_listeners(Event::Assigned);
                 self.notify_listeners(Event::Modified);
-                return true;
+                true
             }
-            DomainState::Failed => {
-                return false;
-            }
-            _ => {
-                return true;
-            }
+            DomainState::Failed => false,
+            _ => true,
         }
     }
     pub fn is_assigned(&self) -> bool {
@@ -62,14 +58,10 @@ impl Variable {
         match self.domain.remove(x) {
             DomainState::Modified => {
                 self.notify_listeners(Event::Modified);
-                return true;
+                true
             }
-            DomainState::Failed => {
-                return false;
-            }
-            _ => {
-                return true;
-            }
+            DomainState::Failed => false,
+            _ => true,
         }
     }
     pub fn get_lb(&self) -> i64 {
@@ -83,14 +75,10 @@ impl Variable {
             DomainState::Modified => {
                 self.notify_listeners(Event::LowerBound);
                 self.notify_listeners(Event::Modified);
-                return true;
+                true
             }
-            DomainState::Failed => {
-                return false;
-            }
-            _ => {
-                return true;
-            }
+            DomainState::Failed => false,
+            _ => true,
         }
     }
     pub fn set_ub(&mut self, x: i64) -> bool {
@@ -98,14 +86,10 @@ impl Variable {
             DomainState::Modified => {
                 self.notify_listeners(Event::UpperBound);
                 self.notify_listeners(Event::Modified);
-                return true;
+                true
             }
-            DomainState::Failed => {
-                return false;
-            }
-            _ => {
-                return true;
-            }
+            DomainState::Failed => false,
+            _ => true,
         }
     }
     pub fn value(&self) -> i64 {
@@ -114,7 +98,7 @@ impl Variable {
         if lb != ub {
             panic!("attempted to get value of unassigned variable");
         } else {
-            return lb;
+            lb
         }
     }
     pub fn add_listener(&mut self, listener: Rc<RefCell<dyn Propagator>>, event: Event) {

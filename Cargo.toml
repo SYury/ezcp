@@ -1,4 +1,19 @@
 [package]
 name = "ezcp"
-version = "0.0.1"
+version = "0.0.2"
 edition = "2021"
+
+[dependencies]
+clap = { "version" = "4.5.58", features = ["derive"], optional = true }
+serde_json = { "version" = "1.0.149", optional = true }
+
+[features]
+default = ["fzn"]
+fzn = ["dep:clap", "dep:serde_json"]
+
+[[bin]]
+name = "ezcp-fzn"
+required-features = ["fzn"]
+
+[lints.clippy]
+new_without_default = "allow"

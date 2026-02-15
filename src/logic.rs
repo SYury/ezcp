@@ -96,12 +96,10 @@ impl Propagator for AndPropagator {
                 }
                 if ones == self.vars.len() {
                     self.result.borrow_mut().fail();
-                } else {
-                    if unknown == 1 && 1 + ones == self.vars.len() {
-                        for v in &self.vars {
-                            if !v.borrow().is_assigned() {
-                                v.borrow_mut().assign(0);
-                            }
+                } else if unknown == 1 && 1 + ones == self.vars.len() {
+                    for v in &self.vars {
+                        if !v.borrow().is_assigned() {
+                            v.borrow_mut().assign(0);
                         }
                     }
                 }

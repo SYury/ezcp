@@ -65,4 +65,3 @@ fn test_alldifferent() {
     assert_domain(y.borrow().iter(), vec![0]);
     assert_domain(z.borrow().iter(), vec![2]);
 }
-
