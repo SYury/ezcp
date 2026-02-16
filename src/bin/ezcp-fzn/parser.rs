@@ -1,7 +1,7 @@
 use ezcp::alldifferent::AllDifferentConstraint;
 use ezcp::binpacking::BinPackingConstraint;
 use ezcp::config::Config;
-use ezcp::linear::LinearInequalityConstraint;
+use ezcp::linear::{LinearInequalityConstraint, LinearNotEqualConstraint};
 use ezcp::logic::{AndConstraint, NegateConstraint, OrConstraint};
 use ezcp::objective_function::SingleVariableObjective;
 use ezcp::solver::Solver;
@@ -13,9 +13,14 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
+pub enum Output {
+    Var(String),
+    Array((String, Vec<String>)),
+}
+
 pub struct MinizincParseResult {
     pub solver: Solver,
-    pub output: Vec<String>,
+    pub output: Vec<Output>,
 }
 
 fn int_array_or_ref(
@@ -103,7 +108,7 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
     let mut vars = HashMap::<String, Rc<RefCell<Variable>>>::new();
     let mut arrays = HashMap::<String, Vec<i64>>::new();
     let mut string_arrays = HashMap::<String, Vec<String>>::new();
-    let output: Vec<String>;
+    let mut output = Vec::<Output>::new();
 
     if let Some(var_json0) = json.get("variables") {
         if let Some(var_json) = var_json0.as_object() {
@@ -291,7 +296,12 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                             )));
                         }
                         "int_lin_ne" => {
-                            return Err("Flatzinc not implemented error: int_lin_ne constraint is currently not supported, sorry.".to_string());
+                            success = true;
+                            solver.add_constraint(Box::new(LinearNotEqualConstraint::new(
+                                cvars,
+                                arr.clone(),
+                                bound,
+                            )));
                         }
                         _ => {
                             return Err(format!("unknown linear constraint {}", id));
@@ -387,6 +397,22 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                                 cvars,
                                 vec![1, -1],
                                 -1,
+                            )));
+                        }
+                        "int_ne" => {
+                            if args.len() != 2 {
+                                return Err(format!(
+                                    "constraint {} has {} arguments instead of 2.",
+                                    id,
+                                    args.len()
+                                ));
+                            }
+                            let cvars = var_array(args, &vars)
+                                .map_err(|s| format!("variables of constraint {}: {}", id, s))?;
+                            solver.add_constraint(Box::new(LinearNotEqualConstraint::new(
+                                cvars,
+                                vec![1, -1],
+                                0,
                             )));
                         }
                         "int_plus" => {
@@ -514,15 +540,18 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
         if out.iter().any(|x| !x.is_string()) {
             return Err("'output' field is not an array of strings.".to_string());
         }
-        output = out
-            .iter()
-            .map(|x| x.as_str().unwrap().to_string())
-            .collect::<Vec<String>>();
-        if let Some(var) = output.iter().find(|s| !vars.contains_key(s.as_str())) {
-            return Err(format!(
-                "Output variable {} does not exist or has unsupported type.",
-                var
-            ));
+        for s in out.iter() {
+            let name = s.as_str().unwrap();
+            if vars.contains_key(name) {
+                output.push(Output::Var(name.to_string()));
+            } else if let Some(a) = string_arrays.get(name) {
+                output.push(Output::Array((name.to_string(), a.clone())));
+            } else {
+                return Err(format!(
+                    "Output element {} does not exist or has unsupported type.",
+                    s
+                ));
+            }
         }
     } else {
         return Err("missing required field 'output'.".to_string());

@@ -1,6 +1,6 @@
 mod parser;
 
-use crate::parser::parse;
+use crate::parser::{parse, Output};
 use clap::Parser;
 use ezcp::solver::SolutionStatus;
 use std::fs::File;
@@ -20,14 +20,26 @@ fn main() {
         println!("=====UNSATISFIABLE=====");
         return;
     }
-    for name in &mz.output {
-        let val = mz
-            .solver
+    let get_var = |name: &str| {
+        mz.solver
             .get_variable_by_name(name)
             .unwrap_or_else(|| panic!("Failed to find output variable {}", name))
             .borrow()
-            .value();
-        println!("{} = {};", name, val);
+            .value()
+    };
+    for item in &mz.output {
+        match item {
+            Output::Var(name) => {
+                println!("{} = {};", name, get_var(name));
+            }
+            Output::Array((name, a)) => {
+                print!("{} = array1d(1..{},", name, a.len());
+                for (i, var) in a.iter().enumerate() {
+                    print!("{}{}", if i == 0 { '[' } else { ',' }, get_var(var));
+                }
+                println!("]);");
+            }
+        }
     }
     println!("----------");
     println!("==========");
