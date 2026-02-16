@@ -1,7 +1,8 @@
 use ezcp::alldifferent::AllDifferentConstraint;
+use ezcp::config::Config;
 use ezcp::linear::LinearInequalityConstraint;
 use ezcp::objective_function::ObjectiveFunction;
-use ezcp::solver::Solver;
+use ezcp::solver::{SolutionStatus, Solver};
 use ezcp::value_selector::MinValueSelector;
 use ezcp::variable::Variable;
 use ezcp::variable_selector::FirstFailVariableSelector;
@@ -33,10 +34,10 @@ impl ObjectiveFunction for SumObjective {
 
 #[test]
 fn test_optimization() {
-    let mut solver = Solver::new(
-        Box::new(FirstFailVariableSelector {}),
+    let mut solver = Solver::new(Config::new(
         Box::new(MinValueSelector {}),
-    );
+        Box::new(FirstFailVariableSelector {}),
+    ));
     let mut vars = Vec::with_capacity(10);
     for i in 0..10 {
         vars.push(solver.new_variable(0, 20, format!("var_{}", i)));
@@ -52,6 +53,9 @@ fn test_optimization() {
     }
     let obj = Box::new(SumObjective { vars });
     solver.add_objective(obj);
-    assert!(solver.solve());
-    assert!(solver.get_objective() == 45);
+    if let SolutionStatus::Optimal(obj) = solver.solve() {
+        assert!(obj == 45);
+    } else {
+        panic!("The solution is not optimal!");
+    }
 }

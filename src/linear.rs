@@ -131,7 +131,6 @@ impl Propagator for LinearInequalityPropagator {
     }
 }
 
-
 // sum x[i] * a[i] != b
 pub struct LinearNotEqualConstraint {
     x: Vec<Rc<RefCell<Variable>>>,
@@ -203,7 +202,12 @@ impl Propagator for LinearNotEqualPropagator {
         if cnt != self.x.len() - 1 {
             return;
         }
-        let (pos, v) = self.x.iter().enumerate().find(|v| !v.1.borrow().is_assigned()).unwrap();
+        let (pos, v) = self
+            .x
+            .iter()
+            .enumerate()
+            .find(|v| !v.1.borrow().is_assigned())
+            .unwrap();
         if self.a[pos] == 0 {
             return;
         }
