@@ -29,6 +29,12 @@ impl Variable {
         }
     }
     pub fn assign(&mut self, x: i64) -> bool {
+        if x > self.domain.get_lb() {
+            self.notify_listeners(Event::LowerBound);
+        }
+        if x < self.domain.get_ub() {
+            self.notify_listeners(Event::UpperBound);
+        }
         match self.domain.assign(x) {
             DomainState::Modified => {
                 self.notify_listeners(Event::Assigned);
@@ -57,6 +63,9 @@ impl Variable {
         }
         match self.domain.remove(x) {
             DomainState::Modified => {
+                if self.domain.is_assigned() {
+                    self.notify_listeners(Event::Assigned);
+                }
                 self.notify_listeners(Event::Modified);
                 true
             }
@@ -73,6 +82,9 @@ impl Variable {
     pub fn set_lb(&mut self, x: i64) -> bool {
         match self.domain.set_lb(x) {
             DomainState::Modified => {
+                if self.domain.is_assigned() {
+                    self.notify_listeners(Event::Assigned);
+                }
                 self.notify_listeners(Event::LowerBound);
                 self.notify_listeners(Event::Modified);
                 true
@@ -84,6 +96,9 @@ impl Variable {
     pub fn set_ub(&mut self, x: i64) -> bool {
         match self.domain.set_ub(x) {
             DomainState::Modified => {
+                if self.domain.is_assigned() {
+                    self.notify_listeners(Event::Assigned);
+                }
                 self.notify_listeners(Event::UpperBound);
                 self.notify_listeners(Event::Modified);
                 true

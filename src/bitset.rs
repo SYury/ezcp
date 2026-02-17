@@ -158,10 +158,10 @@ impl Domain for BitsetDomain {
     }
 
     fn set_lb(&mut self, x: i64) -> DomainState {
-        if x < self.start {
+        if x <= self.get_lb() {
             return DomainState::Same;
         }
-        if x >= self.start + (self.data.len() as i64) * 64 {
+        if x > self.get_ub() {
             self.solver_state.borrow_mut().fail();
             return DomainState::Failed;
         }
@@ -197,11 +197,11 @@ impl Domain for BitsetDomain {
     }
 
     fn set_ub(&mut self, x: i64) -> DomainState {
-        if x < self.start {
+        if x < self.get_lb() {
             self.solver_state.borrow_mut().fail();
             return DomainState::Failed;
         }
-        if x >= self.start + (self.data.len() as i64) * 64 {
+        if x >= self.get_ub() {
             return DomainState::Same;
         }
         let id = (x - self.start) as u64;

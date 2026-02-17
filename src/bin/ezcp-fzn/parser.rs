@@ -1,4 +1,5 @@
 use ezcp::alldifferent::AllDifferentConstraint;
+use ezcp::arithmetic::AbsConstraint;
 use ezcp::binpacking::BinPackingConstraint;
 use ezcp::config::Config;
 use ezcp::linear::{LinearInequalityConstraint, LinearNotEqualConstraint};
@@ -387,6 +388,18 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                                 vec![-1, 1],
                                 0,
                             )));
+                        }
+                        "int_abs" => {
+                            if args.len() != 2 {
+                                return Err(format!(
+                                    "constraint {} has {} arguments instead of 2.",
+                                    id,
+                                    args.len()
+                                ));
+                            }
+                            let cvars = var_array(args, &mut solver)
+                                .map_err(|s| format!("variables of constraint {}: {}", id, s))?;
+                            solver.add_constraint(Box::new(AbsConstraint::new(cvars[1].clone(), cvars[2].clone())));
                         }
                         "int_le" | "bool_le" => {
                             if args.len() != 2 {
