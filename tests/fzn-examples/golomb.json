@@ -1,0 +1,45 @@
+{
+  "variables": {
+    "X_INTRODUCED_17_" : { "type" : "int", "domain" : [[1, 36]] },
+    "X_INTRODUCED_18_" : { "type" : "int", "domain" : [[0, 36]] },
+    "X_INTRODUCED_19_" : { "type" : "int", "domain" : [[0, 36]] },
+    "X_INTRODUCED_20_" : { "type" : "int", "domain" : [[0, 36]] },
+    "X_INTRODUCED_21_" : { "type" : "int", "domain" : [[0, 36]] },
+    "X_INTRODUCED_28_" : { "type" : "int", "domain" : [[0, 36]], "introduced": true, "defined" : true },
+    "X_INTRODUCED_29_" : { "type" : "int", "domain" : [[0, 36]], "introduced": true, "defined" : true },
+    "X_INTRODUCED_30_" : { "type" : "int", "domain" : [[0, 36]], "introduced": true, "defined" : true },
+    "X_INTRODUCED_31_" : { "type" : "int", "domain" : [[0, 36]], "introduced": true, "defined" : true },
+    "X_INTRODUCED_32_" : { "type" : "int", "domain" : [[0, 36]], "introduced": true, "defined" : true },
+    "X_INTRODUCED_33_" : { "type" : "int", "domain" : [[0, 36]], "introduced": true, "defined" : true },
+    "X_INTRODUCED_34_" : { "type" : "int", "domain" : [[0, 36]], "introduced": true, "defined" : true },
+    "X_INTRODUCED_35_" : { "type" : "int", "domain" : [[0, 36]], "introduced": true, "defined" : true },
+    "X_INTRODUCED_36_" : { "type" : "int", "domain" : [[0, 36]], "introduced": true, "defined" : true },
+    "X_INTRODUCED_37_" : { "type" : "int", "domain" : [[0, 36]], "introduced": true, "defined" : true }
+  },
+  "arrays": {
+    "X_INTRODUCED_22_" : { "a": [1, -1] },
+    "mark" : { "a": [0, "X_INTRODUCED_17_", "X_INTRODUCED_18_", "X_INTRODUCED_19_", "X_INTRODUCED_20_", "X_INTRODUCED_21_"] },
+    "differences" : { "a": ["X_INTRODUCED_17_", "X_INTRODUCED_18_", "X_INTRODUCED_19_", "X_INTRODUCED_20_", "X_INTRODUCED_21_", "X_INTRODUCED_28_", "X_INTRODUCED_29_", "X_INTRODUCED_30_", "X_INTRODUCED_31_", "X_INTRODUCED_32_", "X_INTRODUCED_33_", "X_INTRODUCED_34_", "X_INTRODUCED_35_", "X_INTRODUCED_36_", "X_INTRODUCED_37_"] }
+  },
+  "constraints": [
+    { "id" : "int_lin_le", "args" : ["X_INTRODUCED_22_", ["X_INTRODUCED_17_", "X_INTRODUCED_18_"], -1]},
+    { "id" : "int_lin_le", "args" : ["X_INTRODUCED_22_", ["X_INTRODUCED_18_", "X_INTRODUCED_19_"], -1]},
+    { "id" : "int_lin_le", "args" : ["X_INTRODUCED_22_", ["X_INTRODUCED_19_", "X_INTRODUCED_20_"], -1]},
+    { "id" : "int_lin_le", "args" : ["X_INTRODUCED_22_", ["X_INTRODUCED_20_", "X_INTRODUCED_21_"], -1]},
+    { "id" : "ezcp_alldifferent", "args" : ["differences"]},
+    { "id" : "int_lin_le", "args" : [[1, -1, 1], ["X_INTRODUCED_17_", "X_INTRODUCED_21_", "X_INTRODUCED_20_"], -1]},
+    { "id" : "int_lin_eq", "args" : [[1, -1, -1], ["X_INTRODUCED_18_", "X_INTRODUCED_17_", "X_INTRODUCED_28_"], 0], "defines" : "X_INTRODUCED_28_"},
+    { "id" : "int_lin_eq", "args" : [[1, -1, -1], ["X_INTRODUCED_19_", "X_INTRODUCED_17_", "X_INTRODUCED_29_"], 0], "defines" : "X_INTRODUCED_29_"},
+    { "id" : "int_lin_eq", "args" : [[1, -1, -1], ["X_INTRODUCED_20_", "X_INTRODUCED_17_", "X_INTRODUCED_30_"], 0], "defines" : "X_INTRODUCED_30_"},
+    { "id" : "int_lin_eq", "args" : [[1, -1, -1], ["X_INTRODUCED_21_", "X_INTRODUCED_17_", "X_INTRODUCED_31_"], 0], "defines" : "X_INTRODUCED_31_"},
+    { "id" : "int_lin_eq", "args" : [[1, -1, -1], ["X_INTRODUCED_19_", "X_INTRODUCED_18_", "X_INTRODUCED_32_"], 0], "defines" : "X_INTRODUCED_32_"},
+    { "id" : "int_lin_eq", "args" : [[1, -1, -1], ["X_INTRODUCED_20_", "X_INTRODUCED_18_", "X_INTRODUCED_33_"], 0], "defines" : "X_INTRODUCED_33_"},
+    { "id" : "int_lin_eq", "args" : [[1, -1, -1], ["X_INTRODUCED_21_", "X_INTRODUCED_18_", "X_INTRODUCED_34_"], 0], "defines" : "X_INTRODUCED_34_"},
+    { "id" : "int_lin_eq", "args" : [[1, -1, -1], ["X_INTRODUCED_20_", "X_INTRODUCED_19_", "X_INTRODUCED_35_"], 0], "defines" : "X_INTRODUCED_35_"},
+    { "id" : "int_lin_eq", "args" : [[1, -1, -1], ["X_INTRODUCED_21_", "X_INTRODUCED_19_", "X_INTRODUCED_36_"], 0], "defines" : "X_INTRODUCED_36_"},
+    { "id" : "int_lin_eq", "args" : [[1, -1, -1], ["X_INTRODUCED_21_", "X_INTRODUCED_20_", "X_INTRODUCED_37_"], 0], "defines" : "X_INTRODUCED_37_"}
+  ],
+  "output": ["mark"],
+  "solve": { "method" : "minimize", "objective" : "X_INTRODUCED_21_", "ann" : [{ "id" : "int_search", "args" : ["mark", "input_order", "indomain", "complete"]}] },
+  "version": "1.0"
+}

@@ -141,56 +141,36 @@ impl Domain for SmallDomain {
         (self.ub as i64) + self.start
     }
     fn set_lb(&mut self, x: i64) -> DomainState {
-        if x < self.start {
+        if x <= self.get_lb() {
             return DomainState::Same;
         }
-        if x >= self.start + 64 {
+        if x > self.get_ub() {
             self.solver_state.borrow_mut().fail();
             return DomainState::Failed;
         }
-        let mut modified = false;
         let y = x - self.start;
         let y1 = y as u8;
-        if y1 > self.lb {
-            for i in self.lb..y1 {
-                if self.body & (1u64 << i) > 0 {
-                    modified = true;
-                }
-                self.discard(i);
-            }
-            self.lb = y1;
+        for i in self.lb..y1 {
+            self.discard(i);
         }
-        if modified {
-            DomainState::Modified
-        } else {
-            DomainState::Same
-        }
+        self.lb = self.body.trailing_zeros() as u8;
+        DomainState::Modified
     }
     fn set_ub(&mut self, x: i64) -> DomainState {
-        if x < self.start {
+        if x < self.get_lb() {
             self.solver_state.borrow_mut().fail();
             return DomainState::Failed;
         }
-        if x >= self.start + 64 {
+        if x >= self.get_ub() {
             return DomainState::Same;
         }
-        let mut modified = false;
         let y = x - self.start;
         let y1 = y as u8;
-        if y1 < self.ub {
-            for i in y1 + 1..self.ub + 1 {
-                if self.body & (1u64 << i) > 0 {
-                    modified = true;
-                }
-                self.discard(i);
-            }
-            self.ub = y1;
+        for i in y1 + 1..self.ub + 1 {
+            self.discard(i);
         }
-        if modified {
-            DomainState::Modified
-        } else {
-            DomainState::Same
-        }
+        self.ub = 63 - self.body.leading_zeros() as u8;
+        DomainState::Modified
     }
     fn checkpoint(&mut self) {
         self.checkpoints

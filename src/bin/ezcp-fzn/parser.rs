@@ -14,8 +14,8 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 pub enum Output {
-    Var(String),
-    Array((String, Vec<String>)),
+    Var(Rc<RefCell<Variable>>),
+    Array((String, Vec<Rc<RefCell<Variable>>>)),
 }
 
 pub struct MinizincParseResult {
@@ -45,35 +45,38 @@ fn int_array_or_ref(
 
 fn var_array_or_ref(
     json: &serde_json::Value,
-    arrays: &HashMap<String, Vec<String>>,
-    vars: &HashMap<String, Rc<RefCell<Variable>>>,
+    arrays: &HashMap<String, Vec<Rc<RefCell<Variable>>>>,
+    solver: &mut Solver,
 ) -> Result<Vec<Rc<RefCell<Variable>>>, String> {
     if let Some(s) = json.as_str() {
         if let Some(arr) = arrays.get(s) {
-            if let Some(x) = arr.iter().find(|x| !vars.contains_key(*x)) {
-                return Err(format!("references variable {}, but it doesn't exist", x));
-            }
-            Ok(arr
-                .iter()
-                .map(|x| vars.get(x).unwrap().clone())
-                .collect::<Vec<_>>())
+            Ok(arr.to_vec())
         } else {
             Err(format!("references array {}, but it doesn't exist.", s))
         }
     } else if let Some(arr) = json.as_array() {
-        if arr.iter().any(|x| !x.is_string()) {
-            return Err("not a string or string array.".to_string());
+        if arr.iter().any(|x| !x.is_string() && !x.is_i64()) {
+            return Err("not a string or string/int array.".to_string());
         }
-        let names = arr
+        if let Some(x) = arr
             .iter()
-            .map(|x| x.as_str().unwrap())
-            .collect::<Vec<&str>>();
-        if let Some(x) = names.iter().find(|x| !vars.contains_key(**x)) {
-            return Err(format!("references variable {}, but it doesn't exist", x));
+            .find(|x| x.is_string() && !solver.has_variable(x.as_str().unwrap()))
+        {
+            return Err(format!(
+                "references variable {}, but it doesn't exist",
+                x.as_str().unwrap()
+            ));
         }
-        Ok(names
+        Ok(arr
             .iter()
-            .map(|x| vars.get(*x).unwrap().clone())
+            .map(|x| {
+                if let Some(s) = x.as_str() {
+                    solver.get_variable_by_name(s).unwrap().clone()
+                } else {
+                    let val = x.as_i64().unwrap();
+                    solver.const_variable(val)
+                }
+            })
             .collect::<Vec<_>>())
     } else {
         Err("not a string or string array.".to_string())
@@ -82,21 +85,30 @@ fn var_array_or_ref(
 
 fn var_array(
     arr: &[serde_json::Value],
-    vars: &HashMap<String, Rc<RefCell<Variable>>>,
+    solver: &mut Solver,
 ) -> Result<Vec<Rc<RefCell<Variable>>>, String> {
-    if arr.iter().any(|x| !x.is_string()) {
-        return Err("not a string array.".to_string());
+    if arr.iter().any(|x| !x.is_string() && !x.is_i64()) {
+        return Err("not a string or string/int array.".to_string());
     }
-    let names = arr
+    if let Some(x) = arr
         .iter()
-        .map(|x| x.as_str().unwrap())
-        .collect::<Vec<&str>>();
-    if let Some(x) = names.iter().find(|x| !vars.contains_key(**x)) {
-        return Err(format!("references variable {}, but it doesn't exist", x));
+        .find(|x| x.is_string() && !solver.has_variable(x.as_str().unwrap()))
+    {
+        return Err(format!(
+            "references variable {}, but it doesn't exist",
+            x.as_str().unwrap()
+        ));
     }
-    Ok(names
+    Ok(arr
         .iter()
-        .map(|x| vars.get(*x).unwrap().clone())
+        .map(|x| {
+            if let Some(s) = x.as_str() {
+                solver.get_variable_by_name(s).unwrap().clone()
+            } else {
+                let val = x.as_i64().unwrap();
+                solver.const_variable(val)
+            }
+        })
         .collect::<Vec<_>>())
 }
 
@@ -105,9 +117,8 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
         Box::new(MinValueSelector {}),
         Box::new(FirstFailVariableSelector {}),
     ));
-    let mut vars = HashMap::<String, Rc<RefCell<Variable>>>::new();
     let mut arrays = HashMap::<String, Vec<i64>>::new();
-    let mut string_arrays = HashMap::<String, Vec<String>>::new();
+    let mut var_arrays = HashMap::<String, Vec<Rc<RefCell<Variable>>>>::new();
     let mut output = Vec::<Output>::new();
 
     if let Some(var_json0) = json.get("variables") {
@@ -148,10 +159,7 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                                                 name
                                             )
                                         })?;
-                                        vars.insert(
-                                            name.clone(),
-                                            solver.new_variable(l, r, name.clone()),
-                                        );
+                                        solver.new_variable(l, r, name.clone());
                                     } else {
                                         return Err(format!(
                                             "Invalid domain specification for variable {}",
@@ -169,10 +177,7 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                                 if var_inner.contains_key("domain") {
                                     return Err("Oops, it seems that bool vars in flatzinc may have domain... Parser must be fixed.".to_string());
                                 } else {
-                                    vars.insert(
-                                        name.clone(),
-                                        solver.new_variable(0, 1, name.clone()),
-                                    );
+                                    solver.new_variable(0, 1, name.clone());
                                 }
                             }
                             _ => {
@@ -216,11 +221,27 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                     name.clone(),
                     a.iter().map(|x| x.as_i64().unwrap()).collect::<Vec<_>>(),
                 );
-            } else if !a.is_empty() && a.iter().all(|x| x.is_string()) {
-                string_arrays.insert(
+            } else if !a.is_empty() && a.iter().all(|x| x.is_string() || x.is_i64()) {
+                if let Some(s) = a
+                    .iter()
+                    .find(|x| x.is_string() && !solver.has_variable(x.as_str().unwrap()))
+                {
+                    return Err(format!(
+                        "array {} contains string {}, but no variable with this name exists.",
+                        name,
+                        s.as_str().unwrap()
+                    ));
+                }
+                var_arrays.insert(
                     name.clone(),
                     a.iter()
-                        .map(|x| x.as_str().unwrap().to_string())
+                        .map(|x| {
+                            if let Some(s) = x.as_str() {
+                                solver.get_variable_by_name(s).unwrap()
+                            } else {
+                                solver.const_variable(x.as_i64().unwrap())
+                            }
+                        })
                         .collect::<Vec<_>>(),
                 );
             }
@@ -268,7 +289,7 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                     }
                     let arr = int_array_or_ref(&args[0], &arrays)
                         .map_err(|s| format!("coefficient array of constraint {}: {}", id, s))?;
-                    let cvars = var_array_or_ref(&args[1], &string_arrays, &vars)
+                    let cvars = var_array_or_ref(&args[1], &var_arrays, &mut solver)
                         .map_err(|s| format!("variable array of constraint {}: {}", id, s))?;
                     let bound = args[2].as_i64().ok_or_else(|| {
                         format!("non-integer third argument to constraint {}", id)
@@ -318,8 +339,8 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                                     args.len()
                                 ));
                             }
-                            let cvars =
-                                var_array_or_ref(&args[0], &string_arrays, &vars).map_err(|s| {
+                            let cvars = var_array_or_ref(&args[0], &var_arrays, &mut solver)
+                                .map_err(|s| {
                                     format!("variable array of constraint {}: {}", id, s)
                                 })?;
                             solver.add_constraint(Box::new(AllDifferentConstraint::new(cvars)));
@@ -332,11 +353,11 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                                     args.len()
                                 ));
                             }
-                            let cvars0 = var_array_or_ref(&args[0], &string_arrays, &vars)
+                            let cvars0 = var_array_or_ref(&args[0], &var_arrays, &mut solver)
                                 .map_err(|s| {
                                     format!("load variables of constraint {}: {}", id, s)
                                 })?;
-                            let cvars1 = var_array_or_ref(&args[1], &string_arrays, &vars)
+                            let cvars1 = var_array_or_ref(&args[1], &var_arrays, &mut solver)
                                 .map_err(|s| {
                                     format!("bin variables of constraint {}: {}", id, s)
                                 })?;
@@ -354,7 +375,7 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                                     args.len()
                                 ));
                             }
-                            let cvars = var_array(args, &vars)
+                            let cvars = var_array(args, &mut solver)
                                 .map_err(|s| format!("variables of constraint {}: {}", id, s))?;
                             solver.add_constraint(Box::new(LinearInequalityConstraint::new(
                                 cvars.clone(),
@@ -375,7 +396,7 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                                     args.len()
                                 ));
                             }
-                            let cvars = var_array(args, &vars)
+                            let cvars = var_array(args, &mut solver)
                                 .map_err(|s| format!("variables of constraint {}: {}", id, s))?;
                             solver.add_constraint(Box::new(LinearInequalityConstraint::new(
                                 cvars,
@@ -391,7 +412,7 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                                     args.len()
                                 ));
                             }
-                            let cvars = var_array(args, &vars)
+                            let cvars = var_array(args, &mut solver)
                                 .map_err(|s| format!("variables of constraint {}: {}", id, s))?;
                             solver.add_constraint(Box::new(LinearInequalityConstraint::new(
                                 cvars,
@@ -407,7 +428,7 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                                     args.len()
                                 ));
                             }
-                            let cvars = var_array(args, &vars)
+                            let cvars = var_array(args, &mut solver)
                                 .map_err(|s| format!("variables of constraint {}: {}", id, s))?;
                             solver.add_constraint(Box::new(LinearNotEqualConstraint::new(
                                 cvars,
@@ -423,7 +444,7 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                                     args.len()
                                 ));
                             }
-                            let cvars = var_array(args, &vars)
+                            let cvars = var_array(args, &mut solver)
                                 .map_err(|s| format!("variables of constraint {}: {}", id, s))?;
                             solver.add_constraint(Box::new(LinearInequalityConstraint::new(
                                 cvars.clone(),
@@ -444,7 +465,7 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                                     args.len()
                                 ));
                             }
-                            let cvars = var_array(args, &vars)
+                            let cvars = var_array(args, &mut solver)
                                 .map_err(|s| format!("variables of constraint {}: {}", id, s))?;
                             solver.add_constraint(Box::new(NegateConstraint::new(
                                 cvars[0].clone(),
@@ -459,7 +480,7 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                                     args.len()
                                 ));
                             }
-                            let cvars = var_array(args, &vars)
+                            let cvars = var_array(args, &mut solver)
                                 .map_err(|s| format!("variables of constraint {}: {}", id, s))?;
                             solver.add_constraint(Box::new(AndConstraint::new(
                                 cvars[2].clone(),
@@ -474,7 +495,7 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                                     args.len()
                                 ));
                             }
-                            let cvars = var_array(args, &vars)
+                            let cvars = var_array(args, &mut solver)
                                 .map_err(|s| format!("variables of constraint {}: {}", id, s))?;
                             solver.add_constraint(Box::new(OrConstraint::new(
                                 cvars[2].clone(),
@@ -491,9 +512,9 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                                     need_args
                                 ));
                             }
-                            let cvars0 = var_array_or_ref(&args[0], &string_arrays, &vars)
+                            let cvars0 = var_array_or_ref(&args[0], &var_arrays, &mut solver)
                                 .map_err(|s| format!("variables of constraint {}: {}", id, s))?;
-                            let cvars1 = var_array_or_ref(&args[1], &string_arrays, &vars)
+                            let cvars1 = var_array_or_ref(&args[1], &var_arrays, &mut solver)
                                 .map_err(|s| format!("variables of constraint {}: {}", id, s))?;
                             let mut cvars2 = Vec::with_capacity(cvars0.len() + cvars1.len());
                             cvars2.extend_from_slice(&cvars0);
@@ -515,7 +536,7 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                                         id
                                     )
                                 })?;
-                                vars.get(varname).cloned().ok_or_else(|| {
+                                solver.get_variable_by_name(varname).ok_or_else(|| {
                                     format!("{} constraint has unknown variable {}.", id, varname)
                                 })?
                             };
@@ -536,15 +557,15 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
     if let Some(out_json) = json.get("output") {
         let out = out_json
             .as_array()
-            .ok_or_else(|| "'output' field is not an array of strings.".to_string())?;
-        if out.iter().any(|x| !x.is_string()) {
-            return Err("'output' field is not an array of strings.".to_string());
+            .ok_or_else(|| "'output' field is not an array of strings or ints.".to_string())?;
+        if out.iter().any(|x| !x.is_string() && !x.is_i64()) {
+            return Err("'output' field is not an array of strings or ints.".to_string());
         }
         for s in out.iter() {
             let name = s.as_str().unwrap();
-            if vars.contains_key(name) {
-                output.push(Output::Var(name.to_string()));
-            } else if let Some(a) = string_arrays.get(name) {
+            if let Some(var) = solver.get_variable_by_name(name) {
+                output.push(Output::Var(var));
+            } else if let Some(a) = var_arrays.get(name) {
                 output.push(Output::Array((name.to_string(), a.clone())));
             } else {
                 return Err(format!(
@@ -566,10 +587,10 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
             })?;
         if method != "satisfy" {
             let obj = sol_json.get("objective").and_then(|x| x.as_str()).ok_or_else(|| "'objective' is not a string. Note: currently we only support variable names as objective.".to_string())?;
-            if !vars.contains_key(obj) {
+            if !solver.has_variable(obj) {
                 return Err("'objective' is not a valid variable name. Note: currently we only support variable names as objective.".to_string());
             }
-            let var = vars.get(obj).unwrap().clone();
+            let var = solver.get_variable_by_name(obj).unwrap().clone();
             match method {
                 "minimize" => {
                     solver.add_objective(Box::new(SingleVariableObjective { var, coeff: 1 }));

@@ -20,22 +20,16 @@ fn main() {
         println!("=====UNSATISFIABLE=====");
         return;
     }
-    let get_var = |name: &str| {
-        mz.solver
-            .get_variable_by_name(name)
-            .unwrap_or_else(|| panic!("Failed to find output variable {}", name))
-            .borrow()
-            .value()
-    };
     for item in &mz.output {
         match item {
-            Output::Var(name) => {
-                println!("{} = {};", name, get_var(name));
+            Output::Var(var) => {
+                let v = var.borrow();
+                println!("{} = {};", &v.name, v.value());
             }
             Output::Array((name, a)) => {
                 print!("{} = array1d(1..{},", name, a.len());
                 for (i, var) in a.iter().enumerate() {
-                    print!("{}{}", if i == 0 { '[' } else { ',' }, get_var(var));
+                    print!("{}{}", if i == 0 { '[' } else { ',' }, var.borrow().value());
                 }
                 println!("]);");
             }

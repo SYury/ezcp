@@ -47,6 +47,7 @@ pub struct Solver {
     propagators: Vec<Rc<RefCell<dyn Propagator>>>,
     variables: Vec<Rc<RefCell<Variable>>>,
     vars_by_name: HashMap<String, Rc<RefCell<Variable>>>,
+    const_vars: HashMap<i64, Rc<RefCell<Variable>>>,
     variable_selector: Box<dyn VariableSelector>,
     value_selector: Box<dyn ValueSelector>,
     state: Rc<RefCell<SolverState>>,
@@ -63,6 +64,7 @@ impl Solver {
             propagators: Vec::new(),
             variables: Vec::new(),
             vars_by_name: HashMap::new(),
+            const_vars: HashMap::new(),
             variable_selector: config.variable_selector,
             value_selector: config.value_selector,
             state: Rc::new(RefCell::new(SolverState::new())),
@@ -91,6 +93,20 @@ impl Solver {
         let id = self.propagator_id_ctr;
         self.propagator_id_ctr += 1;
         id
+    }
+    /// returns a variable corresponding to the given constant
+    pub fn const_variable(&mut self, val: i64) -> Rc<RefCell<Variable>> {
+        if let Some(var) = self.const_vars.get(&val) {
+            return var.clone();
+        }
+        let var = Rc::new(RefCell::new(Variable::new(
+            self.state.clone(),
+            val,
+            val,
+            format!("_ezcp_internal_const_{}", val),
+        )));
+        self.variables.push(var.clone());
+        var
     }
     /// creates a new variable or returns an existing variable if a variable with the same name exists
     pub fn new_variable(&mut self, lb: i64, ub: i64, name: String) -> Rc<RefCell<Variable>> {
@@ -135,6 +151,9 @@ impl Solver {
         self.variables.push(var.clone());
         self.vars_by_name.insert(name, var.clone());
         var
+    }
+    pub fn has_variable(&self, name: &str) -> bool {
+        self.vars_by_name.contains_key(name)
     }
     pub fn get_variable_by_name(&self, name: &str) -> Option<Rc<RefCell<Variable>>> {
         self.vars_by_name.get(name).cloned()
@@ -186,7 +205,7 @@ impl Solver {
         }
         #[cfg(debug_assertions)]
         for v in self.variables.iter() {
-            eprint!("VAR {}", v.borrow().name);
+            eprint!("VAR {} in [{}, {}]; DOM = ", v.borrow().name, v.borrow().get_lb(), v.borrow().get_ub());
             for val in v.borrow().iter() {
                 eprint!(" {}", val);
             }
@@ -232,6 +251,17 @@ impl Solver {
             }
             return true;
         }
+        #[cfg(debug_assertions)]
+        {
+            eprintln!("PROPAGATION AT NON-TRIVIAL FIXPOINT; STATE AFTER PROPAGATION:");
+            for v in self.variables.iter() {
+                eprint!("VAR {} in [{}, {}]; DOM = ", v.borrow().name, v.borrow().get_lb(), v.borrow().get_ub());
+                for val in v.borrow().iter() {
+                    eprint!(" {}", val);
+                }
+                eprintln!();
+            }
+        }
         if let Some(objective) = &self.objective {
             let bound = objective.bound();
             if bound >= self.current_min {
@@ -246,11 +276,7 @@ impl Solver {
         v.borrow_mut().checkpoint();
         #[cfg(debug_assertions)]
         {
-            let mut i = 0;
-            while !Rc::ptr_eq(&self.variables[i], &v) {
-                i += 1;
-            }
-            eprintln!("fixed value {} for variable {}", x, i);
+            eprintln!("fixed value {} for variable {}", x, &v.borrow().name);
         }
         v.borrow_mut().assign(x);
         let mut found = false;
@@ -268,11 +294,7 @@ impl Solver {
         v.borrow_mut().remove(x);
         #[cfg(debug_assertions)]
         {
-            let mut i = 0;
-            while !Rc::ptr_eq(&self.variables[i], &v) {
-                i += 1;
-            }
-            eprintln!("removed value {} from variable {}", x, i);
+            eprintln!("removed value {} from variable {}", x, &v.borrow().name);
         }
         if self.search() {
             if self.objective.is_none() {
