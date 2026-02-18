@@ -1,5 +1,6 @@
 pub mod alldifferent;
 pub mod arithmetic;
+pub mod array;
 pub mod binpacking;
 pub mod bitset;
 pub mod config;

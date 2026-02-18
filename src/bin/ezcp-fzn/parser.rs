@@ -1,5 +1,6 @@
 use ezcp::alldifferent::AllDifferentConstraint;
 use ezcp::arithmetic::AbsConstraint;
+use ezcp::array::ArrayIntElementConstraint;
 use ezcp::binpacking::BinPackingConstraint;
 use ezcp::config::Config;
 use ezcp::linear::{LinearInequalityConstraint, LinearNotEqualConstraint};
@@ -366,6 +367,23 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                                 .map_err(|s| format!("weight array of constraint {}: {}", id, s))?;
                             solver.add_constraint(Box::new(BinPackingConstraint::new(
                                 cvars1, cvars0, w,
+                            )));
+                        }
+                        "array_int_element" => {
+                            if args.len() != 3 {
+                                return Err(format!(
+                                    "constraint {} has {} arguments instead of 3.",
+                                    id,
+                                    args.len()
+                                ));
+                            }
+                            let index = args[0].as_str().ok_or_else(|| format!("index name of constraint {} is not a string.", id)).and_then(|s| solver.get_variable_by_name(s).ok_or_else(|| format!("index variable {} of constraint {} not found.", s, id)))?;
+                            let arr = int_array_or_ref(&args[1], &arrays).map_err(|s| format!("array of constraint {}: {}", id, s))?;
+                            let value = args[2].as_str().ok_or_else(|| format!("value name of constraint {} is not a string.", id)).and_then(|s| solver.get_variable_by_name(s).ok_or_else(|| format!("value variable {} of constraint {} not found.", s, id)))?;
+                            solver.add_constraint(Box::new(ArrayIntElementConstraint::new(
+                                index,
+                                value,
+                                arr,
                             )));
                         }
                         "int_eq" | "bool_eq" | "bool2int" => {
