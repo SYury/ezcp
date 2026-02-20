@@ -23,6 +23,7 @@ pub enum Output {
 pub struct MinizincParseResult {
     pub solver: Solver,
     pub output: Vec<Output>,
+    pub config: Config,
 }
 
 fn int_array_or_ref(
@@ -115,13 +116,11 @@ fn var_array(
 }
 
 pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
-    let mut solver = Solver::new(Config::new(
-        Box::new(MinValueBrancher {}),
-        Box::new(FirstFailVariableSelector {}),
-    ));
+    let mut solver = Solver::new();
     let mut arrays = HashMap::<String, Vec<i64>>::new();
     let mut var_arrays = HashMap::<String, Vec<Rc<RefCell<Variable>>>>::new();
     let mut output = Vec::<Output>::new();
+    let mut config = Config::default();
 
     if let Some(var_json0) = json.get("variables") {
         if let Some(var_json) = var_json0.as_object() {
@@ -703,5 +702,5 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
     } else {
         return Err("missing required field 'solve'.".to_string());
     }
-    Ok(MinizincParseResult { solver, output })
+    Ok(MinizincParseResult { solver, output, config })
 }

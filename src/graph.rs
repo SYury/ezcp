@@ -2,7 +2,7 @@ use crate::constraint::Constraint;
 use crate::events::Event;
 use crate::propagator::{Propagator, PropagatorControlBlock};
 use crate::scc::compute_scc;
-use crate::solver::Solver;
+use crate::search::Search;
 use crate::variable::Variable;
 use std::cell::RefCell;
 use std::collections::VecDeque;
@@ -195,13 +195,13 @@ impl Constraint for TreeConstraint {
         ntree == trees.len()
     }
 
-    fn create_propagators(&self, solver: &mut Solver) {
+    fn create_propagators(&self, search: &mut Search<'_>) {
         let p = Rc::new(RefCell::new(TreePropagator::new(
             self.ntree.clone(),
             self.parent.clone(),
-            solver.new_propagator_id(),
+            search.new_propagator_id(),
         )));
-        solver.add_propagator(p.clone());
+        search.add_propagator(p.clone());
         p.borrow().listen(p.clone());
     }
 }

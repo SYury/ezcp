@@ -1,4 +1,4 @@
-use crate::solver::SolverState;
+use crate::search::SearchState;
 use std::boxed::Box;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -11,7 +11,7 @@ pub enum DomainState {
 }
 
 pub trait Domain {
-    fn new(solver_state: Rc<RefCell<SolverState>>, lb: i64, ub: i64) -> Self
+    fn new(search_state: Rc<RefCell<SearchState>>, lb: i64, ub: i64) -> Self
     where
         Self: Sized;
     fn assign(&mut self, x: i64) -> DomainState;
@@ -25,13 +25,14 @@ pub trait Domain {
     fn set_ub(&mut self, x: i64) -> DomainState;
     fn checkpoint(&mut self);
     fn rollback(&mut self);
+    fn rollback_all(&mut self);
     fn iter(&self) -> Box<dyn Iterator<Item = i64> + '_>;
     fn size(&self) -> u64;
 }
 
 /// implementation for domains which fit in {0, ..., 63}
 pub struct SmallDomain {
-    solver_state: Rc<RefCell<SolverState>>,
+    search_state: Rc<RefCell<SearchState>>,
     body: u64,
     start: i64,
     lb: u8,
@@ -65,13 +66,13 @@ impl SmallDomain {
 }
 
 impl Domain for SmallDomain {
-    fn new(solver_state: Rc<RefCell<SolverState>>, lb: i64, ub: i64) -> Self {
+    fn new(search_state: Rc<RefCell<SearchState>>, lb: i64, ub: i64) -> Self {
         let body = match ub - lb {
             63 => !0_u64,
             _ => (1_u64 << (ub - lb + 1)) - 1,
         };
         Self {
-            solver_state,
+            search_state,
             body,
             start: lb,
             lb: 0,
@@ -81,12 +82,12 @@ impl Domain for SmallDomain {
     }
     fn assign(&mut self, x: i64) -> DomainState {
         if x < self.start || x >= self.start + 64 {
-            self.solver_state.borrow_mut().fail();
+            self.search_state.borrow_mut().fail();
             return DomainState::Failed;
         }
         let v = (x - self.start) as u8;
         if (self.body & (1_u64 << v)) == 0 {
-            self.solver_state.borrow_mut().fail();
+            self.search_state.borrow_mut().fail();
             DomainState::Failed
         } else {
             let modified = self.body != 1_u64 << v;
@@ -120,7 +121,7 @@ impl Domain for SmallDomain {
         let modified = self.body & (1u64 << v) > 0;
         self.discard(v);
         if self.body == 0 {
-            self.solver_state.borrow_mut().fail();
+            self.search_state.borrow_mut().fail();
             return DomainState::Failed;
         }
         if v == self.lb && self.body > 0 {
@@ -155,7 +156,7 @@ impl Domain for SmallDomain {
             return DomainState::Same;
         }
         if x > self.get_ub() {
-            self.solver_state.borrow_mut().fail();
+            self.search_state.borrow_mut().fail();
             return DomainState::Failed;
         }
         let y = x - self.start;
@@ -168,7 +169,7 @@ impl Domain for SmallDomain {
     }
     fn set_ub(&mut self, x: i64) -> DomainState {
         if x < self.get_lb() {
-            self.solver_state.borrow_mut().fail();
+            self.search_state.borrow_mut().fail();
             return DomainState::Failed;
         }
         if x >= self.get_ub() {
@@ -192,6 +193,11 @@ impl Domain for SmallDomain {
         self.start = state.1;
         self.lb = state.2;
         self.ub = state.3;
+    }
+    fn rollback_all(&mut self) {
+        while !self.checkpoints.is_empty() {
+            self.rollback();
+        }
     }
     fn iter(&self) -> Box<dyn Iterator<Item = i64> + '_> {
         Box::new(SmallDomainIterator {

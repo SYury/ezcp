@@ -1,7 +1,7 @@
 use crate::constraint::Constraint;
 use crate::events::Event;
 use crate::propagator::{Propagator, PropagatorControlBlock};
-use crate::solver::Solver;
+use crate::search::Search;
 use crate::variable::Variable;
 use std::cell::RefCell;
 use std::collections::HashSet;
@@ -43,14 +43,14 @@ impl Constraint for ArrayIntElementConstraint {
         }
         self.array[pos as usize - 1] == v.value()
     }
-    fn create_propagators(&self, solver: &mut Solver) {
+    fn create_propagators(&self, search: &mut Search<'_>) {
         let p = Rc::new(RefCell::new(ArrayIntElementACPropagator::new(
             self.index.clone(),
             self.value.clone(),
             self.array.clone(),
-            solver.new_propagator_id(),
+            search.new_propagator_id(),
         )));
-        solver.add_propagator(p.clone());
+        search.add_propagator(p.clone());
         p.borrow().listen(p.clone());
     }
 }
@@ -158,14 +158,14 @@ impl Constraint for ArrayVarElementConstraint {
         let elem = self.array[pos as usize - 1].borrow();
         elem.is_assigned() && elem.value() == v.value()
     }
-    fn create_propagators(&self, solver: &mut Solver) {
+    fn create_propagators(&self, search: &mut Search) {
         let p = Rc::new(RefCell::new(ArrayVarElementACPropagator::new(
             self.index.clone(),
             self.value.clone(),
             self.array.clone(),
-            solver.new_propagator_id(),
+            search.new_propagator_id(),
         )));
-        solver.add_propagator(p.clone());
+        search.add_propagator(p.clone());
         p.borrow().listen(p.clone());
     }
 }

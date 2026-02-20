@@ -2,7 +2,7 @@ use crate::bitset::BitsetDomain;
 use crate::domain::{Domain, DomainState, SmallDomain};
 use crate::events::{event_index, Event, N_EVENTS};
 use crate::propagator::Propagator;
-use crate::solver::SolverState;
+use crate::search::SearchState;
 use std::boxed::Box;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -11,20 +11,20 @@ use std::rc::Rc;
 pub struct Variable {
     pub domain: Box<dyn Domain>,
     pub listeners: [HashMap<usize, Rc<RefCell<dyn Propagator>>>; N_EVENTS],
-    pub solver_state: Rc<RefCell<SolverState>>,
+    pub search_state: Rc<RefCell<SearchState>>,
     pub name: String,
 }
 
 impl Variable {
-    pub fn new(solver_state: Rc<RefCell<SolverState>>, lb: i64, ub: i64, name: String) -> Self {
+    pub fn new(search_state: Rc<RefCell<SearchState>>, lb: i64, ub: i64, name: String) -> Self {
         let domain: Box<dyn Domain> = match ub - lb <= 63 {
-            true => Box::new(SmallDomain::new(solver_state.clone(), lb, ub)),
-            false => Box::new(BitsetDomain::new(solver_state.clone(), lb, ub)),
+            true => Box::new(SmallDomain::new(search_state.clone(), lb, ub)),
+            false => Box::new(BitsetDomain::new(search_state.clone(), lb, ub)),
         };
         Self {
             domain,
             listeners: Default::default(),
-            solver_state,
+            search_state,
             name,
         }
     }
@@ -52,7 +52,7 @@ impl Variable {
         self.domain.possible(x)
     }
     pub fn fail(&self) {
-        self.solver_state.borrow_mut().fail();
+        self.search_state.borrow_mut().fail();
     }
     pub fn remove(&mut self, x: i64) -> bool {
         if self.domain.get_lb() == x {
@@ -130,17 +130,20 @@ impl Variable {
                 ref_mut.new_event();
             } else {
                 // we are inside listener's propagate()
-                self.solver_state.borrow_mut().reschedule();
+                self.search_state.borrow_mut().reschedule();
                 continue;
             }
             if !listener.borrow().is_queued() {
                 listener.borrow_mut().enqueue();
-                self.solver_state.borrow_mut().enqueue(listener);
+                self.search_state.borrow_mut().enqueue(listener);
             }
         }
     }
     pub fn rollback(&mut self) {
         self.domain.rollback();
+    }
+    pub fn rollback_all(&mut self) {
+        self.domain.rollback_all();
     }
     pub fn checkpoint(&mut self) {
         self.domain.checkpoint();

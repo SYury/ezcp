@@ -15,6 +15,7 @@ pub mod logic;
 pub mod objective_function;
 pub mod propagator;
 pub mod scc;
+pub mod search;
 pub mod solver;
 pub mod variable;
 pub mod variable_selector;

@@ -1,7 +1,7 @@
 use crate::constraint::Constraint;
 use crate::events::Event;
 use crate::propagator::{Propagator, PropagatorControlBlock};
-use crate::solver::Solver;
+use crate::search::Search;
 use crate::variable::Variable;
 use std::cell::RefCell;
 use std::collections::{BinaryHeap, HashMap, HashSet};
@@ -32,12 +32,12 @@ impl Constraint for AllDifferentConstraint {
         }
         true
     }
-    fn create_propagators(&self, solver: &mut Solver) {
+    fn create_propagators(&self, search: &mut Search<'_>) {
         let p = Rc::new(RefCell::new(AllDifferentACPropagator::new(
             self.vars.clone(),
-            solver.new_propagator_id(),
+            search.new_propagator_id(),
         )));
-        solver.add_propagator(p.clone());
+        search.add_propagator(p.clone());
         p.borrow().listen(p.clone());
     }
 }
