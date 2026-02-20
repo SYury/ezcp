@@ -1,8 +1,8 @@
+use crate::brancher::Brancher;
 use crate::config::Config;
 use crate::constraint::Constraint;
 use crate::objective_function::ObjectiveFunction;
 use crate::propagator::Propagator;
-use crate::value_selector::ValueSelector;
 use crate::variable::Variable;
 use crate::variable_selector::VariableSelector;
 use std::boxed::Box;
@@ -49,7 +49,7 @@ pub struct Solver {
     vars_by_name: HashMap<String, Rc<RefCell<Variable>>>,
     const_vars: HashMap<i64, Rc<RefCell<Variable>>>,
     variable_selector: Box<dyn VariableSelector>,
-    value_selector: Box<dyn ValueSelector>,
+    brancher: Box<dyn Brancher>,
     state: Rc<RefCell<SolverState>>,
     objective: Option<Box<dyn ObjectiveFunction>>,
     current_min: i64,
@@ -66,7 +66,7 @@ impl Solver {
             vars_by_name: HashMap::new(),
             const_vars: HashMap::new(),
             variable_selector: config.variable_selector,
-            value_selector: config.value_selector,
+            brancher: config.brancher,
             state: Rc::new(RefCell::new(SolverState::new())),
             objective: None,
             current_min: i64::MAX,
@@ -205,7 +205,12 @@ impl Solver {
         }
         #[cfg(debug_assertions)]
         for v in self.variables.iter() {
-            eprint!("VAR {} in [{}, {}]; DOM = ", v.borrow().name, v.borrow().get_lb(), v.borrow().get_ub());
+            eprint!(
+                "VAR {} in [{}, {}]; DOM = ",
+                v.borrow().name,
+                v.borrow().get_lb(),
+                v.borrow().get_ub()
+            );
             for val in v.borrow().iter() {
                 eprint!(" {}", val);
             }
@@ -255,7 +260,12 @@ impl Solver {
         {
             eprintln!("PROPAGATION AT NON-TRIVIAL FIXPOINT; STATE AFTER PROPAGATION:");
             for v in self.variables.iter() {
-                eprint!("VAR {} in [{}, {}]; DOM = ", v.borrow().name, v.borrow().get_lb(), v.borrow().get_ub());
+                eprint!(
+                    "VAR {} in [{}, {}]; DOM = ",
+                    v.borrow().name,
+                    v.borrow().get_lb(),
+                    v.borrow().get_ub()
+                );
                 for val in v.borrow().iter() {
                     eprint!(" {}", val);
                 }
@@ -272,40 +282,26 @@ impl Solver {
             }
         }
         let v = self.variable_selector.select(vars);
-        let x = self.value_selector.select(v.borrow().domain.as_ref());
-        v.borrow_mut().checkpoint();
-        #[cfg(debug_assertions)]
-        {
-            eprintln!("fixed value {} for variable {}", x, &v.borrow().name);
-        }
-        v.borrow_mut().assign(x);
+        let br = self.brancher.n_branches(v.clone());
         let mut found = false;
-        if self.search() {
-            if self.objective.is_none() {
-                return true;
-            } else {
-                found = true;
+        for b in 0..br {
+            v.borrow_mut().checkpoint();
+            self.brancher.branch(v.clone(), b);
+            #[cfg(debug_assertions)]
+            {
+                eprintln!("branch #{} for variable {}", b, &v.borrow().name);
             }
-        }
-        #[cfg(debug_assertions)]
-        eprintln!("returned after assignment");
-        v.borrow_mut().rollback();
-        v.borrow_mut().checkpoint();
-        v.borrow_mut().remove(x);
-        #[cfg(debug_assertions)]
-        {
-            eprintln!("removed value {} from variable {}", x, &v.borrow().name);
-        }
-        if self.search() {
-            if self.objective.is_none() {
-                return true;
-            } else {
-                found = true;
+            if self.search() {
+                if self.objective.is_none() {
+                    return true;
+                } else {
+                    found = true;
+                }
             }
+            #[cfg(debug_assertions)]
+            eprintln!("returned from branch #{}", b);
+            v.borrow_mut().rollback();
         }
-        #[cfg(debug_assertions)]
-        eprintln!("returned after removal");
-        v.borrow_mut().rollback();
         for v in &mut self.variables {
             v.borrow_mut().rollback();
         }

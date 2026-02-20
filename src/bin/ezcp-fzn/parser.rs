@@ -1,13 +1,13 @@
 use ezcp::alldifferent::AllDifferentConstraint;
 use ezcp::arithmetic::AbsConstraint;
-use ezcp::array::ArrayIntElementConstraint;
+use ezcp::array::{ArrayIntElementConstraint, ArrayVarElementConstraint};
 use ezcp::binpacking::BinPackingConstraint;
+use ezcp::brancher::MinValueBrancher;
 use ezcp::config::Config;
 use ezcp::linear::{LinearInequalityConstraint, LinearNotEqualConstraint};
 use ezcp::logic::{AndConstraint, NegateConstraint, OrConstraint};
 use ezcp::objective_function::SingleVariableObjective;
 use ezcp::solver::Solver;
-use ezcp::value_selector::MinValueSelector;
 use ezcp::variable::Variable;
 use ezcp::variable_selector::FirstFailVariableSelector;
 use std::boxed::Box;
@@ -116,7 +116,7 @@ fn var_array(
 
 pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
     let mut solver = Solver::new(Config::new(
-        Box::new(MinValueSelector {}),
+        Box::new(MinValueBrancher {}),
         Box::new(FirstFailVariableSelector {}),
     ));
     let mut arrays = HashMap::<String, Vec<i64>>::new();
@@ -377,13 +377,76 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                                     args.len()
                                 ));
                             }
-                            let index = args[0].as_str().ok_or_else(|| format!("index name of constraint {} is not a string.", id)).and_then(|s| solver.get_variable_by_name(s).ok_or_else(|| format!("index variable {} of constraint {} not found.", s, id)))?;
-                            let arr = int_array_or_ref(&args[1], &arrays).map_err(|s| format!("array of constraint {}: {}", id, s))?;
-                            let value = args[2].as_str().ok_or_else(|| format!("value name of constraint {} is not a string.", id)).and_then(|s| solver.get_variable_by_name(s).ok_or_else(|| format!("value variable {} of constraint {} not found.", s, id)))?;
+                            let index = args[0]
+                                .as_str()
+                                .ok_or_else(|| {
+                                    format!("index name of constraint {} is not a string.", id)
+                                })
+                                .and_then(|s| {
+                                    solver.get_variable_by_name(s).ok_or_else(|| {
+                                        format!(
+                                            "index variable {} of constraint {} not found.",
+                                            s, id
+                                        )
+                                    })
+                                })?;
+                            let arr = int_array_or_ref(&args[1], &arrays)
+                                .map_err(|s| format!("array of constraint {}: {}", id, s))?;
+                            let value = args[2]
+                                .as_str()
+                                .ok_or_else(|| {
+                                    format!("value name of constraint {} is not a string.", id)
+                                })
+                                .and_then(|s| {
+                                    solver.get_variable_by_name(s).ok_or_else(|| {
+                                        format!(
+                                            "value variable {} of constraint {} not found.",
+                                            s, id
+                                        )
+                                    })
+                                })?;
                             solver.add_constraint(Box::new(ArrayIntElementConstraint::new(
-                                index,
-                                value,
-                                arr,
+                                index, value, arr,
+                            )));
+                        }
+                        "array_var_int_element" => {
+                            if args.len() != 3 {
+                                return Err(format!(
+                                    "constraint {} has {} arguments instead of 3.",
+                                    id,
+                                    args.len()
+                                ));
+                            }
+                            let index = args[0]
+                                .as_str()
+                                .ok_or_else(|| {
+                                    format!("index name of constraint {} is not a string.", id)
+                                })
+                                .and_then(|s| {
+                                    solver.get_variable_by_name(s).ok_or_else(|| {
+                                        format!(
+                                            "index variable {} of constraint {} not found.",
+                                            s, id
+                                        )
+                                    })
+                                })?;
+                            let arr = var_array_or_ref(&args[1], &var_arrays, &mut solver)
+                                .map_err(|s| format!("array of constraint {}: {}", id, s))?;
+                            let value = args[2]
+                                .as_str()
+                                .ok_or_else(|| {
+                                    format!("value name of constraint {} is not a string.", id)
+                                })
+                                .and_then(|s| {
+                                    solver.get_variable_by_name(s).ok_or_else(|| {
+                                        format!(
+                                            "value variable {} of constraint {} not found.",
+                                            s, id
+                                        )
+                                    })
+                                })?;
+                            solver.add_constraint(Box::new(ArrayVarElementConstraint::new(
+                                index, value, arr,
                             )));
                         }
                         "int_eq" | "bool_eq" | "bool2int" => {
@@ -417,7 +480,10 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                             }
                             let cvars = var_array(args, &mut solver)
                                 .map_err(|s| format!("variables of constraint {}: {}", id, s))?;
-                            solver.add_constraint(Box::new(AbsConstraint::new(cvars[1].clone(), cvars[2].clone())));
+                            solver.add_constraint(Box::new(AbsConstraint::new(
+                                cvars[1].clone(),
+                                cvars[2].clone(),
+                            )));
                         }
                         "int_le" | "bool_le" => {
                             if args.len() != 2 {

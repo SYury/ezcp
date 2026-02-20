@@ -5,10 +5,10 @@
  *
  * Use sample_satisfiable.cnf and sample_unsatisfiable.cnf for example (files taken from SATLIB: https://www.cs.ubc.ca/~hoos/SATLIB/benchm.html)
  */
+use ezcp::brancher::MinValueBrancher;
 use ezcp::config::Config;
 use ezcp::logic::{AndConstraint, NegateConstraint, OrConstraint};
 use ezcp::solver::{SolutionStatus, Solver};
-use ezcp::value_selector::MinValueSelector;
 use ezcp::variable_selector::FirstFailVariableSelector;
 use std::boxed::Box;
 use std::fs::File;
@@ -66,7 +66,7 @@ fn main() {
     let (n_vars, clauses) = read_cnf_file(&args[1]);
     let mut solver = Solver::new(
         Config::new(
-            Box::new(MinValueSelector {}),
+            Box::new(MinValueBrancher {}),
             Box::new(FirstFailVariableSelector {}),
         )
     );

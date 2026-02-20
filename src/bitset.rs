@@ -157,6 +157,27 @@ impl Domain for BitsetDomain {
         self.start + ((self.last_block as i64) * 64 + (shift as i64))
     }
 
+    fn get_median(&self) -> i64 {
+        let mut id = self.size / 2;
+        let mut block = self.first_block;
+        let mut shift = self.start;
+        loop {
+            let curr = self.data[block].count_ones() as u64;
+            if curr <= id {
+                id -= curr;
+                block += 1;
+                shift += 64;
+                continue;
+            }
+            let mut item = self.data[block];
+            for _ in 0..id {
+                let j = item.trailing_zeros();
+                item ^= 1u64 << j;
+            }
+            return shift + (item.trailing_zeros() as i64);
+        }
+    }
+
     fn set_lb(&mut self, x: i64) -> DomainState {
         if x <= self.get_lb() {
             return DomainState::Same;

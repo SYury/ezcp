@@ -1,18 +1,15 @@
-use crate::value_selector::{MinValueSelector, ValueSelector};
+use crate::brancher::{Brancher, MinValueBrancher};
 use crate::variable_selector::{FirstFailVariableSelector, VariableSelector};
 
 pub struct Config {
-    pub value_selector: Box<dyn ValueSelector>,
+    pub brancher: Box<dyn Brancher>,
     pub variable_selector: Box<dyn VariableSelector>,
 }
 
 impl Config {
-    pub fn new(
-        value_selector: Box<dyn ValueSelector>,
-        variable_selector: Box<dyn VariableSelector>,
-    ) -> Self {
+    pub fn new(brancher: Box<dyn Brancher>, variable_selector: Box<dyn VariableSelector>) -> Self {
         Self {
-            value_selector,
+            brancher,
             variable_selector,
         }
     }
@@ -21,7 +18,7 @@ impl Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            value_selector: Box::new(MinValueSelector {}),
+            brancher: Box::new(MinValueBrancher {}),
             variable_selector: Box::new(FirstFailVariableSelector {}),
         }
     }

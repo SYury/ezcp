@@ -6,9 +6,9 @@
  * Use sample.txt for example.
  */
 use ezcp::binpacking::BinPackingConstraint;
+use ezcp::brancher::MinValueBrancher;
 use ezcp::config::Config;
 use ezcp::solver::{binary_search_optimizer, Solver};
-use ezcp::value_selector::MinValueSelector;
 use ezcp::variable_selector::FirstFailVariableSelector;
 use std::boxed::Box;
 use std::fs::File;
@@ -37,7 +37,7 @@ fn main() {
     let create_solver = |bins: i64| {
         let mut solver = Solver::new(
             Config::new(
-                Box::new(MinValueSelector {}),
+                Box::new(MinValueBrancher {}),
                 Box::new(FirstFailVariableSelector {}),
             )
         );

@@ -9,6 +9,7 @@
  * Output format:
  * [edge list] or infeasibility message
  */
+use ezcp::brancher::MinValueBrancher;
 use ezcp::config::Config;
 use ezcp::constraint::Constraint;
 use ezcp::events::Event;
@@ -16,7 +17,6 @@ use ezcp::gcc::GlobalCardinalityACPropagator;
 use ezcp::graph::TreeConstraint;
 use ezcp::propagator::{Propagator, PropagatorControlBlock};
 use ezcp::solver::{SolutionStatus, Solver};
-use ezcp::value_selector::MinValueSelector;
 use ezcp::variable::Variable;
 use ezcp::variable_selector::FirstFailVariableSelector;
 use std::boxed::Box;
@@ -139,7 +139,7 @@ impl Propagator for DegreePropagator {
         &mut self.pcb
     }
 
-    fn is_idemponent(&self) -> bool {
+    fn is_idempotent(&self) -> bool {
         true
     }
 }
@@ -151,7 +151,7 @@ fn main() {
     let max_degree = scanner.next::<usize>();
     let mut solver = Solver::new(
         Config::new(
-            Box::new(MinValueSelector {}),
+            Box::new(MinValueBrancher {}),
             Box::new(FirstFailVariableSelector {}),
         )
     );

@@ -20,6 +20,7 @@ pub trait Domain {
     fn possible(&self, x: i64) -> bool;
     fn get_lb(&self) -> i64;
     fn get_ub(&self) -> i64;
+    fn get_median(&self) -> i64;
     fn set_lb(&mut self, x: i64) -> DomainState;
     fn set_ub(&mut self, x: i64) -> DomainState;
     fn checkpoint(&mut self);
@@ -139,6 +140,15 @@ impl Domain for SmallDomain {
     }
     fn get_ub(&self) -> i64 {
         (self.ub as i64) + self.start
+    }
+    fn get_median(&self) -> i64 {
+        let id = self.size() / 2;
+        let mut body = self.body;
+        for _ in 0..id {
+            let j = body.trailing_zeros() as u8;
+            body ^= 1u64 << j;
+        }
+        (body.trailing_zeros() as i64) + self.start
     }
     fn set_lb(&mut self, x: i64) -> DomainState {
         if x <= self.get_lb() {

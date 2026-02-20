@@ -4,9 +4,9 @@
  * but it is sufficient for demonstrating CP solution.
  */
 use ezcp::alldifferent::AllDifferentConstraint;
+use ezcp::brancher::MinValueBrancher;
 use ezcp::config::Config;
 use ezcp::solver::{SolutionStatus, Solver};
-use ezcp::value_selector::MinValueSelector;
 use ezcp::variable_selector::FirstFailVariableSelector;
 use std::boxed::Box;
 
@@ -114,7 +114,7 @@ fn main() {
     }
     let mut solver = Solver::new(
         Config::new(
-            Box::new(MinValueSelector {}),
+            Box::new(MinValueBrancher {}),
             Box::new(FirstFailVariableSelector {}),
         )
     );

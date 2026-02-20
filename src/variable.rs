@@ -79,6 +79,9 @@ impl Variable {
     pub fn get_ub(&self) -> i64 {
         self.domain.get_ub()
     }
+    pub fn get_median(&self) -> i64 {
+        self.domain.get_median()
+    }
     pub fn set_lb(&mut self, x: i64) -> bool {
         match self.domain.set_lb(x) {
             DomainState::Modified => {

@@ -255,11 +255,7 @@ pub struct AbsPropagator {
 }
 
 impl AbsPropagator {
-    pub fn new(
-        x: Rc<RefCell<Variable>>,
-        y: Rc<RefCell<Variable>>,
-        id: usize,
-    ) -> Self {
+    pub fn new(x: Rc<RefCell<Variable>>, y: Rc<RefCell<Variable>>, id: usize) -> Self {
         Self {
             pcb: PropagatorControlBlock::new(id),
             x,

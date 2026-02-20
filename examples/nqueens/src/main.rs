@@ -8,9 +8,9 @@
  */
 use ezcp::alldifferent::AllDifferentConstraint;
 use ezcp::arithmetic::SimpleArithmeticConstraint;
+use ezcp::brancher::MinValueBrancher;
 use ezcp::config::Config;
 use ezcp::solver::{SolutionStatus, Solver};
-use ezcp::value_selector::MinValueSelector;
 use ezcp::variable_selector::FirstFailVariableSelector;
 use std::boxed::Box;
 
@@ -22,7 +22,7 @@ fn main() {
     let n = args[1].parse::<usize>().expect("You must provide a single integer argument: board side.");
     let mut solver = Solver::new(
         Config::new(
-            Box::new(MinValueSelector {}),
+            Box::new(MinValueBrancher {}),
             Box::new(FirstFailVariableSelector {}),
         )
     );
