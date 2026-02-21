@@ -158,7 +158,7 @@ impl Domain for BitsetDomain {
     }
 
     fn get_median(&self) -> i64 {
-        let mut id = self.size / 2;
+        let mut id = (self.size - 1) / 2;
         let mut block = self.first_block;
         let mut shift = self.start;
         loop {

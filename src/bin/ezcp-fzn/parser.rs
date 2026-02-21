@@ -2,14 +2,17 @@ use ezcp::alldifferent::AllDifferentConstraint;
 use ezcp::arithmetic::AbsConstraint;
 use ezcp::array::{ArrayIntElementConstraint, ArrayVarElementConstraint};
 use ezcp::binpacking::BinPackingConstraint;
-use ezcp::brancher::MinValueBrancher;
+use ezcp::brancher::{MaxValueBrancher, MedianValueBrancher, MinValueBrancher, SplitBrancher};
 use ezcp::config::Config;
 use ezcp::linear::{LinearInequalityConstraint, LinearNotEqualConstraint};
 use ezcp::logic::{AndConstraint, NegateConstraint, OrConstraint};
 use ezcp::objective_function::SingleVariableObjective;
 use ezcp::solver::Solver;
 use ezcp::variable::Variable;
-use ezcp::variable_selector::FirstFailVariableSelector;
+use ezcp::variable_selector::{
+    AntiFirstFailVariableSelector, FirstFailVariableSelector, LexVariableSelector,
+    ValueVariableSelector,
+};
 use std::boxed::Box;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -699,8 +702,74 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                 }
             }
         }
+        if let Some(ann) = sol_json.get("ann").and_then(|x| x.as_array()) {
+            if let Some(item) = ann.iter().find(|x| {
+                if let Some(obj) = x.as_object() {
+                    if let Some(id) = obj.get("id").and_then(|x| x.as_str()) {
+                        return id == "int_search" || id == "bool_search";
+                    }
+                    return false;
+                }
+                false
+            }) {
+                let obj = item.as_object().unwrap();
+                if let Some(args) = obj.get("args").and_then(|x| x.as_array()) {
+                    if args.len() >= 3 && args[1].is_string() && args[2].is_string() {
+                        if let Ok(vars) = var_array_or_ref(&args[0], &var_arrays, &mut solver) {
+                            config.branchable_vars = vars;
+                            let svar = args[1].as_str().unwrap();
+                            let sval = args[2].as_str().unwrap();
+                            match svar {
+                                "input_order" => {
+                                    config.variable_selector = Box::new(LexVariableSelector {});
+                                }
+                                "first_fail" => {
+                                    config.variable_selector =
+                                        Box::new(FirstFailVariableSelector {});
+                                }
+                                "anti_first_fail" => {
+                                    config.variable_selector =
+                                        Box::new(AntiFirstFailVariableSelector {});
+                                }
+                                "smallest" => {
+                                    config.variable_selector =
+                                        Box::new(ValueVariableSelector { largest: false });
+                                }
+                                "largest" => {
+                                    config.variable_selector =
+                                        Box::new(ValueVariableSelector { largest: true });
+                                }
+                                _ => {}
+                            }
+                            match sval {
+                                "indomain_min" => {
+                                    config.brancher = Box::new(MinValueBrancher {});
+                                }
+                                "indomain_max" => {
+                                    config.brancher = Box::new(MaxValueBrancher {});
+                                }
+                                "indomain_median" => {
+                                    config.brancher = Box::new(MedianValueBrancher {});
+                                }
+                                "indomain_split" => {
+                                    config.brancher = Box::new(SplitBrancher { reverse: false });
+                                }
+                                "indomain_reverse_split" => {
+                                    config.brancher = Box::new(SplitBrancher { reverse: true });
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+            }
+        }
     } else {
         return Err("missing required field 'solve'.".to_string());
     }
-    Ok(MinizincParseResult { solver, output, config })
+    Ok(MinizincParseResult {
+        solver,
+        output,
+        config,
+    })
 }

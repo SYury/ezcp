@@ -1,6 +1,3 @@
-use std::cell::RefCell;
-use std::collections::VecDeque;
-use std::rc::Rc;
 use crate::brancher::Brancher;
 use crate::config::Config;
 use crate::constraint::Constraint;
@@ -8,6 +5,9 @@ use crate::objective_function::ObjectiveFunction;
 use crate::propagator::Propagator;
 use crate::variable::Variable;
 use crate::variable_selector::VariableSelector;
+use std::cell::RefCell;
+use std::collections::VecDeque;
+use std::rc::Rc;
 
 #[derive(Default)]
 pub struct SearchState {
@@ -44,9 +44,10 @@ pub struct Search<'a> {
     variables: &'a [Rc<RefCell<Variable>>],
     variable_selector: Box<dyn VariableSelector>,
     brancher: Box<dyn Brancher>,
+    branchable_vars: Vec<Rc<RefCell<Variable>>>,
     all_solutions: bool,
     state: Rc<RefCell<SearchState>>,
-    objective: Option<&'a Box<dyn ObjectiveFunction>>,
+    objective: Option<&'a dyn ObjectiveFunction>,
     current_min: i64,
     best_solution: Vec<i64>,
     propagator_id_ctr: usize,
@@ -63,7 +64,13 @@ pub struct SearchStats {
 }
 
 impl<'a> Search<'a> {
-    pub fn new(config: Config, constraints: &'a [Box<dyn Constraint>], variables: &'a [Rc<RefCell<Variable>>], objective: Option<&'a Box<dyn ObjectiveFunction>>, state: Rc<RefCell<SearchState>>) -> Self {
+    pub fn new(
+        config: Config,
+        constraints: &'a [Box<dyn Constraint>],
+        variables: &'a [Rc<RefCell<Variable>>],
+        objective: Option<&'a dyn ObjectiveFunction>,
+        state: Rc<RefCell<SearchState>>,
+    ) -> Self {
         {
             let mut s = state.borrow_mut();
             *s = SearchState::default();
@@ -75,6 +82,7 @@ impl<'a> Search<'a> {
             propagators: Vec::new(),
             variable_selector: config.variable_selector,
             brancher: config.brancher,
+            branchable_vars: config.branchable_vars,
             all_solutions: config.all_solutions,
             state,
             objective,
@@ -177,16 +185,22 @@ impl Iterator for Search<'_> {
                 self.brancher.branch(var.clone(), node.branch);
                 #[cfg(debug_assertions)]
                 {
-                    eprintln!("branch #{} for variable {}", node.branch, &var.borrow().name);
+                    eprintln!(
+                        "branch #{} for variable {}",
+                        node.branch,
+                        &var.borrow().name
+                    );
                 }
                 self.stack.last_mut().unwrap().branch += 1;
                 self.stack.push(SearchNode::default());
                 continue;
-            }
-            else {
+            } else {
                 #[cfg(debug_assertions)]
                 if self.objective.is_some() {
-                    eprintln!("entered new search node; current best objective = {}", self.current_min);
+                    eprintln!(
+                        "entered new search node; current best objective = {}",
+                        self.current_min
+                    );
                 }
                 #[cfg(debug_assertions)]
                 for v in self.variables {
@@ -213,9 +227,17 @@ impl Iterator for Search<'_> {
                     continue;
                 }
                 let mut vars = Vec::new();
-                for v in self.variables {
-                    if !v.borrow().is_assigned() {
-                        vars.push(v.clone());
+                if self.branchable_vars.is_empty() {
+                    for v in self.variables {
+                        if !v.borrow().is_assigned() {
+                            vars.push(v.clone());
+                        }
+                    }
+                } else {
+                    for v in &self.branchable_vars {
+                        if !v.borrow().is_assigned() {
+                            vars.push(v.clone());
+                        }
                     }
                 }
                 if vars.is_empty() {
@@ -226,7 +248,7 @@ impl Iterator for Search<'_> {
                         self.stack.pop();
                         continue;
                     }
-                    if let Some(objective) = &self.objective {
+                    if let Some(objective) = self.objective {
                         let val = objective.eval();
                         if val < self.current_min {
                             self.current_min = val;
@@ -281,7 +303,11 @@ impl Iterator for Search<'_> {
                 let v = self.variable_selector.select(vars);
                 let br = self.brancher.n_branches(v.clone());
                 self.stack.pop();
-                self.stack.push(SearchNode{var: Some(v.clone()), branch: 0, n_branches: br});
+                self.stack.push(SearchNode {
+                    var: Some(v.clone()),
+                    branch: 0,
+                    n_branches: br,
+                });
                 continue;
             }
         }

@@ -116,7 +116,13 @@ impl Solver {
             for v in &self.variables {
                 v.borrow_mut().rollback_all();
             }
-            Some(Search::new(config, &self.constraints, &self.variables, self.objective.as_ref(), self.state.clone()))
+            Some(Search::new(
+                config,
+                &self.constraints,
+                &self.variables,
+                self.objective.as_deref(),
+                self.state.clone(),
+            ))
         }
     }
 }

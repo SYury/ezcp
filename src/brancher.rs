@@ -42,8 +42,25 @@ impl Brancher for MaxValueBrancher {
     }
 }
 
+pub struct MedianValueBrancher {}
+
+impl Brancher for MedianValueBrancher {
+    fn n_branches(&self, _: Rc<RefCell<Variable>>) -> usize {
+        2
+    }
+    fn branch(&self, v: Rc<RefCell<Variable>>, branch: usize) {
+        let mut vv = v.borrow_mut();
+        let x = vv.get_median();
+        if branch == 0 {
+            vv.assign(x);
+        } else {
+            vv.remove(x);
+        }
+    }
+}
+
 pub struct SplitBrancher {
-    reverse: bool,
+    pub reverse: bool,
 }
 
 impl Brancher for SplitBrancher {

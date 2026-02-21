@@ -143,7 +143,7 @@ impl Domain for SmallDomain {
         (self.ub as i64) + self.start
     }
     fn get_median(&self) -> i64 {
-        let id = self.size() / 2;
+        let id = (self.size() - 1) / 2;
         let mut body = self.body;
         for _ in 0..id {
             let j = body.trailing_zeros() as u8;

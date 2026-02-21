@@ -30,3 +30,51 @@ impl VariableSelector for FirstFailVariableSelector {
         vars[pos].clone()
     }
 }
+
+pub struct AntiFirstFailVariableSelector {}
+
+impl VariableSelector for AntiFirstFailVariableSelector {
+    fn select(&self, vars: Vec<Rc<RefCell<Variable>>>) -> Rc<RefCell<Variable>> {
+        let mut pos = 0;
+        let mut best_size = vars[0].borrow().size();
+        for (i, v) in vars.iter().enumerate().skip(1) {
+            let size = v.borrow().size();
+            if size > best_size {
+                pos = i;
+                best_size = size;
+            }
+        }
+        vars[pos].clone()
+    }
+}
+
+pub struct ValueVariableSelector {
+    pub largest: bool,
+}
+
+impl VariableSelector for ValueVariableSelector {
+    fn select(&self, vars: Vec<Rc<RefCell<Variable>>>) -> Rc<RefCell<Variable>> {
+        let mut pos = 0;
+        let mut best_val = if self.largest {
+            vars[0].borrow().get_ub()
+        } else {
+            vars[0].borrow().get_lb()
+        };
+        for (i, v) in vars.iter().enumerate().skip(1) {
+            if self.largest {
+                let val = v.borrow().get_ub();
+                if val > best_val {
+                    pos = i;
+                    best_val = val;
+                }
+            } else {
+                let val = v.borrow().get_lb();
+                if val < best_val {
+                    pos = i;
+                    best_val = val;
+                }
+            }
+        }
+        vars[pos].clone()
+    }
+}
