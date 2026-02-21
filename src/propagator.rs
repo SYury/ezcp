@@ -26,7 +26,7 @@ pub trait Propagator {
 
     fn get_cb_mut(&mut self) -> &mut PropagatorControlBlock;
 
-    fn is_idemponent(&self) -> bool {
+    fn is_idempotent(&self) -> bool {
         false
     }
 

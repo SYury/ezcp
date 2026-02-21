@@ -15,10 +15,9 @@ use ezcp::events::Event;
 use ezcp::gcc::GlobalCardinalityACPropagator;
 use ezcp::graph::TreeConstraint;
 use ezcp::propagator::{Propagator, PropagatorControlBlock};
-use ezcp::solver::{SolutionStatus, Solver};
-use ezcp::value_selector::MinValueSelector;
+use ezcp::search::Search;
+use ezcp::solver::Solver;
 use ezcp::variable::Variable;
-use ezcp::variable_selector::FirstFailVariableSelector;
 use std::boxed::Box;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -84,13 +83,13 @@ impl Constraint for DegreeConstraint {
         }
         *deg.iter().max().unwrap() <= self.max_degree
     }
-    fn create_propagators(&self, solver: &mut Solver) {
+    fn create_propagators(&self, search: &mut Search<'_>) {
         let p = Rc::new(RefCell::new(DegreePropagator::new(
             self.max_degree,
             self.parent.clone(),
-            solver.new_propagator_id(),
+            search.new_propagator_id(),
         )));
-        solver.add_propagator(p.clone());
+        search.add_propagator(p.clone());
         p.borrow().listen(p.clone());
     }
 }
@@ -139,7 +138,7 @@ impl Propagator for DegreePropagator {
         &mut self.pcb
     }
 
-    fn is_idemponent(&self) -> bool {
+    fn is_idempotent(&self) -> bool {
         true
     }
 }
@@ -149,12 +148,7 @@ fn main() {
     let g = read_graph(&mut scanner);
     let n = g.len();
     let max_degree = scanner.next::<usize>();
-    let mut solver = Solver::new(
-        Config::new(
-            Box::new(MinValueSelector {}),
-            Box::new(FirstFailVariableSelector {}),
-        )
-    );
+    let mut solver = Solver::new();
     let ntree = solver.new_variable(1, 1, format!("ntree"));
     let mut parent = Vec::with_capacity(n);
     for i in 0..n {
@@ -180,9 +174,8 @@ fn main() {
                 max_degree,
                 parent.clone(),
                 )));
-    if solver.solve() == SolutionStatus::Infeasible {
-        println!("No spanning tree with degree <= {} found.", max_degree);
-    } else {
+    let mut search = solver.search(Config::default()).unwrap();
+    if let Some(_) = search.next() {
         let mut root = n;
         for v in 0..n {
             let u = parent[v].borrow().value() as usize;
@@ -194,5 +187,7 @@ fn main() {
             }
         }
         assert!(root < n);
+    } else {
+        println!("No spanning tree with degree <= {} found.", max_degree);
     }
 }

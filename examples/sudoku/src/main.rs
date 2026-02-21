@@ -5,9 +5,7 @@
  */
 use ezcp::alldifferent::AllDifferentConstraint;
 use ezcp::config::Config;
-use ezcp::solver::{SolutionStatus, Solver};
-use ezcp::value_selector::MinValueSelector;
-use ezcp::variable_selector::FirstFailVariableSelector;
+use ezcp::solver::Solver;
 use std::boxed::Box;
 
 const RNG_MOD: u64 = 1 << 31;
@@ -112,12 +110,7 @@ fn main() {
         }
         println!("{}", s);
     }
-    let mut solver = Solver::new(
-        Config::new(
-            Box::new(MinValueSelector {}),
-            Box::new(FirstFailVariableSelector {}),
-        )
-    );
+    let mut solver = Solver::new();
     let mut vars = Vec::with_capacity(81);
     for i in 0..9 {
         for j in 0..9 {
@@ -157,7 +150,8 @@ fn main() {
             solver.add_constraint(Box::new(AllDifferentConstraint::new(v)));
         }
     }
-    assert!(solver.solve() == SolutionStatus::Feasible);
+    let mut search = solver.search(Config::default()).unwrap();
+    assert!(search.next().is_some());
     println!("Solver found solution:");
     for i in 0..9 {
         let mut s = String::new();

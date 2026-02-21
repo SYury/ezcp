@@ -1,0 +1,32 @@
+{
+  "variables": {
+    "X_INTRODUCED_38_" : { "type" : "int", "domain" : [[0, 3]] },
+    "X_INTRODUCED_39_" : { "type" : "int", "domain" : [[0, 3]] },
+    "X_INTRODUCED_40_" : { "type" : "int", "domain" : [[0, 1350]], "defined" : true },
+    "X_INTRODUCED_41_" : { "type" : "int", "domain" : [[0, 6]], "defined" : true },
+    "X_INTRODUCED_42_" : { "type" : "int", "domain" : [[0, 675]], "defined" : true },
+    "X_INTRODUCED_43_" : { "type" : "int", "domain" : [[0, 500]], "defined" : true },
+    "X_INTRODUCED_44_" : { "type" : "int", "domain" : [[0, 225]], "defined" : true },
+    "X_INTRODUCED_45_" : { "type" : "int", "domain" : [[0, 2550]], "defined" : true }
+  },
+  "arrays": {
+    "X_INTRODUCED_55_" : { "a": [1, -250, -200] },
+    "X_INTRODUCED_58_" : { "a": [1, -2] },
+    "X_INTRODUCED_64_" : { "a": [1, -75, -150] },
+    "X_INTRODUCED_68_" : { "a": [1, -100, -150] },
+    "X_INTRODUCED_70_" : { "a": [1, -75] },
+    "produce" : { "a": ["X_INTRODUCED_38_", "X_INTRODUCED_39_"] },
+    "used" : { "a": ["X_INTRODUCED_40_", "X_INTRODUCED_41_", "X_INTRODUCED_42_", "X_INTRODUCED_43_", "X_INTRODUCED_44_"] }
+  },
+  "constraints": [
+    { "id" : "int_lin_eq", "args" : ["X_INTRODUCED_55_", ["X_INTRODUCED_40_", "X_INTRODUCED_38_", "X_INTRODUCED_39_"], 0], "defines" : "X_INTRODUCED_40_"},
+    { "id" : "int_lin_eq", "args" : ["X_INTRODUCED_58_", ["X_INTRODUCED_41_", "X_INTRODUCED_38_"], 0], "defines" : "X_INTRODUCED_41_"},
+    { "id" : "int_lin_eq", "args" : ["X_INTRODUCED_64_", ["X_INTRODUCED_42_", "X_INTRODUCED_38_", "X_INTRODUCED_39_"], 0], "defines" : "X_INTRODUCED_42_"},
+    { "id" : "int_lin_eq", "args" : ["X_INTRODUCED_68_", ["X_INTRODUCED_43_", "X_INTRODUCED_38_", "X_INTRODUCED_39_"], 0], "defines" : "X_INTRODUCED_43_"},
+    { "id" : "int_lin_eq", "args" : ["X_INTRODUCED_70_", ["X_INTRODUCED_44_", "X_INTRODUCED_39_"], 0], "defines" : "X_INTRODUCED_44_"},
+    { "id" : "int_lin_eq", "args" : [[400, 450, -1], ["X_INTRODUCED_38_", "X_INTRODUCED_39_", "X_INTRODUCED_45_"], 0], "ann" : ["ctx_pos"], "defines" : "X_INTRODUCED_45_"}
+  ],
+  "output": ["produce", "used"],
+  "solve": { "method" : "maximize", "objective" : "X_INTRODUCED_45_" },
+  "version": "1.0"
+}

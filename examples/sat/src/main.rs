@@ -7,9 +7,7 @@
  */
 use ezcp::config::Config;
 use ezcp::logic::{AndConstraint, NegateConstraint, OrConstraint};
-use ezcp::solver::{SolutionStatus, Solver};
-use ezcp::value_selector::MinValueSelector;
-use ezcp::variable_selector::FirstFailVariableSelector;
+use ezcp::solver::Solver;
 use std::boxed::Box;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
@@ -64,12 +62,7 @@ fn main() {
         panic!("You must provide a single argument: path to CNF file.");
     }
     let (n_vars, clauses) = read_cnf_file(&args[1]);
-    let mut solver = Solver::new(
-        Config::new(
-            Box::new(MinValueSelector {}),
-            Box::new(FirstFailVariableSelector {}),
-        )
-    );
+    let mut solver = Solver::new();
     let mut vars = Vec::with_capacity(n_vars);
     let mut negations = Vec::with_capacity(n_vars);
     let mut clause_vars = Vec::with_capacity(clauses.len());
@@ -95,13 +88,14 @@ fn main() {
     }
     let sat_var = solver.new_variable(1, 1, format!("sat"));
     solver.add_constraint(Box::new(AndConstraint::new(sat_var.clone(), clause_vars.clone())));
-    if solver.solve() == SolutionStatus::Infeasible {
-        println!("Unsatisfiable.");
-    } else {
+    let mut search = solver.search(Config::default()).unwrap();
+    if let Some(_) = search.next() {
         println!("Satisfiable.");
         for v in &vars {
             print!("{} ", v.borrow().value());
         }
         println!("");
+    } else {
+        println!("Unsatisfiable.");
     }
 }

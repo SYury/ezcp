@@ -9,9 +9,7 @@
 use ezcp::alldifferent::AllDifferentConstraint;
 use ezcp::arithmetic::SimpleArithmeticConstraint;
 use ezcp::config::Config;
-use ezcp::solver::{SolutionStatus, Solver};
-use ezcp::value_selector::MinValueSelector;
-use ezcp::variable_selector::FirstFailVariableSelector;
+use ezcp::solver::Solver;
 use std::boxed::Box;
 
 fn main() {
@@ -20,12 +18,7 @@ fn main() {
         panic!("You must provide a single integer argument: board side.");
     }
     let n = args[1].parse::<usize>().expect("You must provide a single integer argument: board side.");
-    let mut solver = Solver::new(
-        Config::new(
-            Box::new(MinValueSelector {}),
-            Box::new(FirstFailVariableSelector {}),
-        )
-    );
+    let mut solver = Solver::new();
     let mut vars = Vec::with_capacity(n);
     let mut diag1 = Vec::with_capacity(n);
     let mut diag2 = Vec::with_capacity(n);
@@ -58,7 +51,8 @@ fn main() {
     solver.add_constraint(alldiff2);
     let alldiff3 = Box::new(AllDifferentConstraint::new(diag2.clone()));
     solver.add_constraint(alldiff3);
-    assert!(solver.solve() == SolutionStatus::Feasible);
+    let mut search = solver.search(Config::default()).unwrap();
+    assert!(search.next().is_some());
     let mut used = vec![false; n];
     let mut used_diag1 = vec![false; 2 * n];
     let mut used_diag2 = vec![false; 2 * n];

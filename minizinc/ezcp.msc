@@ -1,0 +1,8 @@
+name = "ezcp";
+version = "0.0.2";
+id = "org.ezcp.ezcp";
+executable = "ezcp-fzn";
+tags = ["cp"];
+inputType = "JSON";
+stdFlags = ["-a", "-n"];
+mznlib = ".";

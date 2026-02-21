@@ -1,6 +1,6 @@
 use ezcp::alldifferent::AllDifferentACPropagator;
 use ezcp::propagator::Propagator;
-use ezcp::solver::SolverState;
+use ezcp::search::SearchState;
 use ezcp::variable::Variable;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -40,21 +40,21 @@ fn assert_domain(mut it: impl Iterator<Item = i64>, expected: Vec<i64>) {
 
 #[test]
 fn test_alldifferent() {
-    let fake_solver_state = Rc::new(RefCell::new(SolverState::new()));
+    let fake_search_state = Rc::new(RefCell::new(SearchState::default()));
     let x = Rc::new(RefCell::new(Variable::new(
-        fake_solver_state.clone(),
+        fake_search_state.clone(),
         0,
         2,
         "x".to_string(),
     )));
     let y = Rc::new(RefCell::new(Variable::new(
-        fake_solver_state.clone(),
+        fake_search_state.clone(),
         0,
         0,
         "y".to_string(),
     )));
     let z = Rc::new(RefCell::new(Variable::new(
-        fake_solver_state,
+        fake_search_state,
         2,
         2,
         "z".to_string(),
@@ -65,4 +65,3 @@ fn test_alldifferent() {
     assert_domain(y.borrow().iter(), vec![0]);
     assert_domain(z.borrow().iter(), vec![2]);
 }
-

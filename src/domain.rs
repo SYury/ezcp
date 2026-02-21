@@ -1,4 +1,4 @@
-use crate::solver::SolverState;
+use crate::search::SearchState;
 use std::boxed::Box;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -11,7 +11,7 @@ pub enum DomainState {
 }
 
 pub trait Domain {
-    fn new(solver_state: Rc<RefCell<SolverState>>, lb: i64, ub: i64) -> Self
+    fn new(search_state: Rc<RefCell<SearchState>>, lb: i64, ub: i64) -> Self
     where
         Self: Sized;
     fn assign(&mut self, x: i64) -> DomainState;
@@ -20,17 +20,19 @@ pub trait Domain {
     fn possible(&self, x: i64) -> bool;
     fn get_lb(&self) -> i64;
     fn get_ub(&self) -> i64;
+    fn get_median(&self) -> i64;
     fn set_lb(&mut self, x: i64) -> DomainState;
     fn set_ub(&mut self, x: i64) -> DomainState;
     fn checkpoint(&mut self);
     fn rollback(&mut self);
+    fn rollback_all(&mut self);
     fn iter(&self) -> Box<dyn Iterator<Item = i64> + '_>;
     fn size(&self) -> u64;
 }
 
 /// implementation for domains which fit in {0, ..., 63}
 pub struct SmallDomain {
-    solver_state: Rc<RefCell<SolverState>>,
+    search_state: Rc<RefCell<SearchState>>,
     body: u64,
     start: i64,
     lb: u8,
@@ -59,18 +61,18 @@ impl Iterator for SmallDomainIterator {
 
 impl SmallDomain {
     fn discard(&mut self, x: u8) {
-        self.body &= !((1 as u64) << x);
+        self.body &= !(1_u64 << x);
     }
 }
 
 impl Domain for SmallDomain {
-    fn new(solver_state: Rc<RefCell<SolverState>>, lb: i64, ub: i64) -> Self {
+    fn new(search_state: Rc<RefCell<SearchState>>, lb: i64, ub: i64) -> Self {
         let body = match ub - lb {
-            63 => !(0 as u64),
-            _ => ((1 as u64) << (ub - lb + 1)) - 1,
+            63 => !0_u64,
+            _ => (1_u64 << (ub - lb + 1)) - 1,
         };
         Self {
-            solver_state,
+            search_state,
             body,
             start: lb,
             lb: 0,
@@ -80,16 +82,16 @@ impl Domain for SmallDomain {
     }
     fn assign(&mut self, x: i64) -> DomainState {
         if x < self.start || x >= self.start + 64 {
-            self.solver_state.borrow_mut().fail();
+            self.search_state.borrow_mut().fail();
             return DomainState::Failed;
         }
         let v = (x - self.start) as u8;
-        if (self.body & ((1 as u64) << v)) == 0 {
-            self.solver_state.borrow_mut().fail();
+        if (self.body & (1_u64 << v)) == 0 {
+            self.search_state.borrow_mut().fail();
             DomainState::Failed
         } else {
-            let modified = self.body != (1 as u64) << v;
-            self.body = (1 as u64) << v;
+            let modified = self.body != 1_u64 << v;
+            self.body = 1_u64 << v;
             self.lb = v;
             self.ub = v;
             if modified {
@@ -119,7 +121,7 @@ impl Domain for SmallDomain {
         let modified = self.body & (1u64 << v) > 0;
         self.discard(v);
         if self.body == 0 {
-            self.solver_state.borrow_mut().fail();
+            self.search_state.borrow_mut().fail();
             return DomainState::Failed;
         }
         if v == self.lb && self.body > 0 {
@@ -140,57 +142,46 @@ impl Domain for SmallDomain {
     fn get_ub(&self) -> i64 {
         (self.ub as i64) + self.start
     }
+    fn get_median(&self) -> i64 {
+        let id = (self.size() - 1) / 2;
+        let mut body = self.body;
+        for _ in 0..id {
+            let j = body.trailing_zeros() as u8;
+            body ^= 1u64 << j;
+        }
+        (body.trailing_zeros() as i64) + self.start
+    }
     fn set_lb(&mut self, x: i64) -> DomainState {
-        if x < self.start {
+        if x <= self.get_lb() {
             return DomainState::Same;
         }
-        if x >= self.start + 64 {
-            self.solver_state.borrow_mut().fail();
+        if x > self.get_ub() {
+            self.search_state.borrow_mut().fail();
             return DomainState::Failed;
         }
-        let mut modified = false;
         let y = x - self.start;
         let y1 = y as u8;
-        if y1 > self.lb {
-            for i in self.lb..y1 {
-                if self.body & (1u64 << i) > 0 {
-                    modified = true;
-                }
-                self.discard(i);
-            }
-            self.lb = y1;
+        for i in self.lb..y1 {
+            self.discard(i);
         }
-        if modified {
-            DomainState::Modified
-        } else {
-            DomainState::Same
-        }
+        self.lb = self.body.trailing_zeros() as u8;
+        DomainState::Modified
     }
     fn set_ub(&mut self, x: i64) -> DomainState {
-        if x < self.start {
-            self.solver_state.borrow_mut().fail();
+        if x < self.get_lb() {
+            self.search_state.borrow_mut().fail();
             return DomainState::Failed;
         }
-        if x >= self.start + 64 {
+        if x >= self.get_ub() {
             return DomainState::Same;
         }
-        let mut modified = false;
         let y = x - self.start;
         let y1 = y as u8;
-        if y1 < self.ub {
-            for i in y1 + 1..self.ub + 1 {
-                if self.body & (1u64 << i) > 0 {
-                    modified = true;
-                }
-                self.discard(i);
-            }
-            self.ub = y1;
+        for i in y1 + 1..self.ub + 1 {
+            self.discard(i);
         }
-        if modified {
-            DomainState::Modified
-        } else {
-            DomainState::Same
-        }
+        self.ub = 63 - self.body.leading_zeros() as u8;
+        DomainState::Modified
     }
     fn checkpoint(&mut self) {
         self.checkpoints
@@ -203,10 +194,15 @@ impl Domain for SmallDomain {
         self.lb = state.2;
         self.ub = state.3;
     }
+    fn rollback_all(&mut self) {
+        while !self.checkpoints.is_empty() {
+            self.rollback();
+        }
+    }
     fn iter(&self) -> Box<dyn Iterator<Item = i64> + '_> {
         Box::new(SmallDomainIterator {
-            body: self.body.clone(),
-            start: self.start.clone(),
+            body: self.body,
+            start: self.start,
         })
     }
     fn size(&self) -> u64 {

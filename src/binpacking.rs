@@ -1,7 +1,7 @@
 use crate::constraint::Constraint;
 use crate::events::Event;
 use crate::propagator::{Propagator, PropagatorControlBlock};
-use crate::solver::Solver;
+use crate::search::Search;
 use crate::variable::Variable;
 use std::cell::RefCell;
 use std::cmp::max;
@@ -48,14 +48,14 @@ impl Constraint for BinPackingConstraint {
         true
     }
 
-    fn create_propagators(&self, solver: &mut Solver) {
+    fn create_propagators(&self, search: &mut Search<'_>) {
         let p = Rc::new(RefCell::new(BinPackingPropagator::new(
             self.assignment.clone(),
             self.load.clone(),
             self.weight.clone(),
-            solver.new_propagator_id(),
+            search.new_propagator_id(),
         )));
-        solver.add_propagator(p.clone());
+        search.add_propagator(p.clone());
         p.borrow().listen(p.clone());
     }
 }
@@ -110,7 +110,7 @@ impl BinPackingPropagator {
     }
 }
 
-fn no_sum(s: &Vec<i64>, l: i64, r: i64, l1: &mut i64, r1: &mut i64) -> bool {
+fn no_sum(s: &[i64], l: i64, r: i64, l1: &mut i64, r1: &mut i64) -> bool {
     if l <= 0 || r >= s.iter().sum() {
         return false;
     }
@@ -144,7 +144,7 @@ fn no_sum(s: &Vec<i64>, l: i64, r: i64, l1: &mut i64, r1: &mut i64) -> bool {
     sa < l
 }
 
-fn bound(items: &Vec<i64>, capacity: i64) -> usize {
+fn bound(items: &[i64], capacity: i64) -> usize {
     let n = items.len();
     let mut big = 0;
     while big < n && 2 * items[big] > capacity {
@@ -308,8 +308,8 @@ impl Propagator for BinPackingPropagator {
                 let mut cand = candidate[j].clone();
                 cand.remove(pos);
                 let mut c = Vec::with_capacity(cand.len());
-                for k in 0..cand.len() {
-                    c.push(self.weight[cand[k]]);
+                for k in &cand {
+                    c.push(self.weight[*k]);
                 }
                 if no_sum(
                     &c,
@@ -343,8 +343,8 @@ impl Propagator for BinPackingPropagator {
                 unpacked.push(self.weight[i]);
             }
         }
-        for j in 0..bins {
-            let w = required_sum[j] + bin_capacity - self.load[j].borrow().get_ub();
+        for (j, s) in required_sum.iter().enumerate() {
+            let w = *s + bin_capacity - self.load[j].borrow().get_ub();
             if w > 0 {
                 fake.push(w);
             }

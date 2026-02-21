@@ -6,9 +6,9 @@
  * Use sample.txt for example.
  */
 use ezcp::binpacking::BinPackingConstraint;
+use ezcp::brancher::MinValueBrancher;
 use ezcp::config::Config;
-use ezcp::solver::{binary_search_optimizer, SolutionStatus, Solver};
-use ezcp::value_selector::MinValueSelector;
+use ezcp::solver::{binary_search_optimizer, Solver};
 use ezcp::variable_selector::FirstFailVariableSelector;
 use std::boxed::Box;
 use std::fs::File;
@@ -35,12 +35,7 @@ fn main() {
     }
     let (items, capacity) = read_dataset(&args[1]);
     let create_solver = |bins: i64| {
-        let mut solver = Solver::new(
-            Config::new(
-                Box::new(MinValueSelector {}),
-                Box::new(FirstFailVariableSelector {}),
-            )
-        );
+        let mut solver = Solver::new();
         let mut assignment = Vec::with_capacity(items.len());
         let mut load = Vec::with_capacity(bins as usize);
         for i in 0..items.len() {
@@ -55,7 +50,10 @@ fn main() {
             items.clone(),
         ));
         solver.add_constraint(bp);
-        solver
+        (solver, Config::new(
+                 Box::new(MinValueBrancher {}),
+                 Box::new(FirstFailVariableSelector {}),
+                 false))
     };
     let opt = binary_search_optimizer(create_solver, 0, items.len() as i64);
     println!("Optimal number of bins is {}", opt);

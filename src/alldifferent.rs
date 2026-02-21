@@ -1,7 +1,7 @@
 use crate::constraint::Constraint;
 use crate::events::Event;
 use crate::propagator::{Propagator, PropagatorControlBlock};
-use crate::solver::Solver;
+use crate::search::Search;
 use crate::variable::Variable;
 use std::cell::RefCell;
 use std::collections::{BinaryHeap, HashMap, HashSet};
@@ -32,12 +32,12 @@ impl Constraint for AllDifferentConstraint {
         }
         true
     }
-    fn create_propagators(&self, solver: &mut Solver) {
+    fn create_propagators(&self, search: &mut Search<'_>) {
         let p = Rc::new(RefCell::new(AllDifferentACPropagator::new(
             self.vars.clone(),
-            solver.new_propagator_id(),
+            search.new_propagator_id(),
         )));
-        solver.add_propagator(p.clone());
+        search.add_propagator(p.clone());
         p.borrow().listen(p.clone());
     }
 }
@@ -58,8 +58,8 @@ impl SCC {
         let n = gr.len();
         let mut rev_id_map = vec![Vec::<usize>::new(); n];
         let mut grt = vec![Vec::<usize>::new(); n];
-        for i in 0..n {
-            for (id, j) in gr[i].iter().cloned().enumerate() {
+        for (i, row) in gr.iter().enumerate() {
+            for (id, j) in row.iter().cloned().enumerate() {
                 grt[j].push(i);
                 rev_id_map[j].push(id);
             }
@@ -109,9 +109,9 @@ impl SCC {
     pub fn get_bad_edges(&mut self) -> Vec<(usize, usize)> {
         self.find_scc();
         let mut ok = vec![Vec::<bool>::new(); self.n];
-        for v in 0..self.n {
-            ok[v] = vec![false; self.gr[v].len()];
-            for (i, u) in self.gr[v].iter().cloned().enumerate() {
+        for (v, row) in self.gr.iter().enumerate() {
+            ok[v] = vec![false; row.len()];
+            for (i, u) in row.iter().cloned().enumerate() {
                 if self.comp[v] == self.comp[u] || v < u {
                     ok[v][i] = true;
                 }
@@ -130,8 +130,8 @@ impl SCC {
                     }
                 }
             }
-            for v in 0..self.n {
-                if free[v] {
+            for (v, f) in free.iter().enumerate() {
+                if *f {
                     q[qt] = v;
                     qt += 1;
                 }
@@ -158,8 +158,8 @@ impl SCC {
             }
         }
         let mut ans = Vec::<(usize, usize)>::new();
-        for v in 0..self.n {
-            for (u, flag) in self.gr[v].iter().cloned().zip(ok[v].iter().cloned()) {
+        for (v, row) in self.gr.iter().enumerate() {
+            for (u, flag) in row.iter().cloned().zip(ok[v].iter().cloned()) {
                 if !flag {
                     ans.push((v, u));
                 }
@@ -204,7 +204,7 @@ pub(crate) enum MatchingReturnValue {
 }
 
 impl ACMatching {
-    pub fn new(vars: &Vec<Rc<RefCell<Variable>>>, count: Option<&HashMap<i64, i32>>) -> Self {
+    pub fn new(vars: &[Rc<RefCell<Variable>>], count: Option<&HashMap<i64, i32>>) -> Self {
         let n = vars.len();
         let mut edges = Vec::<FlowEdge>::new();
         let mut graph = Vec::<Vec<usize>>::with_capacity(n);
@@ -212,12 +212,11 @@ impl ACMatching {
         let mut h = BinaryHeap::<(i64, usize)>::new();
         let mut borrowed_vars = Vec::with_capacity(n);
         let mut it = Vec::<Box<dyn Iterator<Item = i64> + '_>>::with_capacity(n);
-        for i in 0..n {
-            borrowed_vars.push(vars[i].borrow());
+        for v in vars {
+            borrowed_vars.push(v.borrow());
         }
-        for i in 0..n {
+        for var in &borrowed_vars {
             graph.push(Vec::new());
-            let var = &borrowed_vars[i];
             it.push(var.iter());
         }
         for (i, iter) in it.iter_mut().enumerate() {
@@ -261,8 +260,8 @@ impl ACMatching {
         }
         for i in n..vals.len() + n {
             let e = edges.len();
-            if count.is_some() {
-                edges.push(FlowEdge::new(t, *count.unwrap().get(&vals[i - n]).unwrap()));
+            if let Some(map) = count {
+                edges.push(FlowEdge::new(t, *map.get(&vals[i - n]).unwrap()));
             } else {
                 edges.push(FlowEdge::new(t, 1));
             }
@@ -435,7 +434,7 @@ impl Propagator for AllDifferentACPropagator {
         &mut self.pcb
     }
 
-    fn is_idemponent(&self) -> bool {
+    fn is_idempotent(&self) -> bool {
         true
     }
 }

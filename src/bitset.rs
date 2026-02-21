@@ -1,11 +1,11 @@
 use crate::domain::{Domain, DomainState};
-use crate::solver::SolverState;
+use crate::search::SearchState;
 use std::boxed::Box;
 use std::cell::RefCell;
 use std::rc::Rc;
 
 pub struct BitsetDomain {
-    solver_state: Rc<RefCell<SolverState>>,
+    search_state: Rc<RefCell<SearchState>>,
     data: Vec<u64>,
     start: i64,
     first_block: usize,
@@ -58,7 +58,7 @@ impl Iterator for BitsetDomainIterator<'_> {
 }
 
 impl Domain for BitsetDomain {
-    fn new(solver_state: Rc<RefCell<SolverState>>, lb: i64, ub: i64) -> Self {
+    fn new(search_state: Rc<RefCell<SearchState>>, lb: i64, ub: i64) -> Self {
         let size = (ub - lb + 1) as u64;
         let blocks = (size / 64 + ((size % 64 > 0) as u64)) as usize;
         let mut data = vec![u64::MAX; blocks];
@@ -67,7 +67,7 @@ impl Domain for BitsetDomain {
             data[blocks - 1] = (1u64 << x) - 1;
         }
         Self {
-            solver_state,
+            search_state,
             data,
             start: lb,
             first_block: 0,
@@ -81,14 +81,14 @@ impl Domain for BitsetDomain {
 
     fn assign(&mut self, x: i64) -> DomainState {
         if x < self.start || x >= self.start + (self.data.len() as i64) * 64 {
-            self.solver_state.borrow_mut().fail();
+            self.search_state.borrow_mut().fail();
             return DomainState::Failed;
         }
         let id = (x - self.start) as u64;
         let block = (id / 64) as usize;
         let shift = id - (block as u64) * 64;
         if 0 == (self.data[block] & (1u64 << shift)) {
-            self.solver_state.borrow_mut().fail();
+            self.search_state.borrow_mut().fail();
             return DomainState::Failed;
         }
         if self.size == 1 {
@@ -135,7 +135,7 @@ impl Domain for BitsetDomain {
         self.data[block] ^= 1u64 << shift;
         self.size -= 1;
         if self.size == 0 {
-            self.solver_state.borrow_mut().fail();
+            self.search_state.borrow_mut().fail();
             return DomainState::Failed;
         }
         while self.data[self.first_block] == 0 {
@@ -157,12 +157,33 @@ impl Domain for BitsetDomain {
         self.start + ((self.last_block as i64) * 64 + (shift as i64))
     }
 
+    fn get_median(&self) -> i64 {
+        let mut id = (self.size - 1) / 2;
+        let mut block = self.first_block;
+        let mut shift = self.start;
+        loop {
+            let curr = self.data[block].count_ones() as u64;
+            if curr <= id {
+                id -= curr;
+                block += 1;
+                shift += 64;
+                continue;
+            }
+            let mut item = self.data[block];
+            for _ in 0..id {
+                let j = item.trailing_zeros();
+                item ^= 1u64 << j;
+            }
+            return shift + (item.trailing_zeros() as i64);
+        }
+    }
+
     fn set_lb(&mut self, x: i64) -> DomainState {
-        if x < self.start {
+        if x <= self.get_lb() {
             return DomainState::Same;
         }
-        if x >= self.start + (self.data.len() as i64) * 64 {
-            self.solver_state.borrow_mut().fail();
+        if x > self.get_ub() {
+            self.search_state.borrow_mut().fail();
             return DomainState::Failed;
         }
         let id = (x - self.start) as u64;
@@ -183,7 +204,7 @@ impl Domain for BitsetDomain {
                 self.data[block] &= !((1u64 << shift) - 1);
             }
             if self.size == 0 {
-                self.solver_state.borrow_mut().fail();
+                self.search_state.borrow_mut().fail();
                 return DomainState::Failed;
             }
             while self.data[self.first_block] == 0 {
@@ -197,11 +218,11 @@ impl Domain for BitsetDomain {
     }
 
     fn set_ub(&mut self, x: i64) -> DomainState {
-        if x < self.start {
-            self.solver_state.borrow_mut().fail();
+        if x < self.get_lb() {
+            self.search_state.borrow_mut().fail();
             return DomainState::Failed;
         }
-        if x >= self.start + (self.data.len() as i64) * 64 {
+        if x >= self.get_ub() {
             return DomainState::Same;
         }
         let id = (x - self.start) as u64;
@@ -222,7 +243,7 @@ impl Domain for BitsetDomain {
                 self.data[block] &= (2u64 << shift) - 1;
             }
             if self.size == 0 {
-                self.solver_state.borrow_mut().fail();
+                self.search_state.borrow_mut().fail();
                 return DomainState::Failed;
             }
             while self.data[self.last_block] == 0 {
@@ -255,6 +276,12 @@ impl Domain for BitsetDomain {
             }
         }
         self.trail = self.checkpoints.pop().unwrap();
+    }
+
+    fn rollback_all(&mut self) {
+        while !self.checkpoints.is_empty() {
+            self.rollback();
+        }
     }
 
     fn iter(&self) -> Box<dyn Iterator<Item = i64> + '_> {

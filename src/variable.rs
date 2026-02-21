@@ -2,7 +2,7 @@ use crate::bitset::BitsetDomain;
 use crate::domain::{Domain, DomainState, SmallDomain};
 use crate::events::{event_index, Event, N_EVENTS};
 use crate::propagator::Propagator;
-use crate::solver::SolverState;
+use crate::search::SearchState;
 use std::boxed::Box;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -11,36 +11,38 @@ use std::rc::Rc;
 pub struct Variable {
     pub domain: Box<dyn Domain>,
     pub listeners: [HashMap<usize, Rc<RefCell<dyn Propagator>>>; N_EVENTS],
-    pub solver_state: Rc<RefCell<SolverState>>,
+    pub search_state: Rc<RefCell<SearchState>>,
     pub name: String,
 }
 
 impl Variable {
-    pub fn new(solver_state: Rc<RefCell<SolverState>>, lb: i64, ub: i64, name: String) -> Self {
+    pub fn new(search_state: Rc<RefCell<SearchState>>, lb: i64, ub: i64, name: String) -> Self {
         let domain: Box<dyn Domain> = match ub - lb <= 63 {
-            true => Box::new(SmallDomain::new(solver_state.clone(), lb, ub)),
-            false => Box::new(BitsetDomain::new(solver_state.clone(), lb, ub)),
+            true => Box::new(SmallDomain::new(search_state.clone(), lb, ub)),
+            false => Box::new(BitsetDomain::new(search_state.clone(), lb, ub)),
         };
         Self {
             domain,
             listeners: Default::default(),
-            solver_state,
+            search_state,
             name,
         }
     }
     pub fn assign(&mut self, x: i64) -> bool {
+        if x > self.domain.get_lb() {
+            self.notify_listeners(Event::LowerBound);
+        }
+        if x < self.domain.get_ub() {
+            self.notify_listeners(Event::UpperBound);
+        }
         match self.domain.assign(x) {
             DomainState::Modified => {
                 self.notify_listeners(Event::Assigned);
                 self.notify_listeners(Event::Modified);
-                return true;
+                true
             }
-            DomainState::Failed => {
-                return false;
-            }
-            _ => {
-                return true;
-            }
+            DomainState::Failed => false,
+            _ => true,
         }
     }
     pub fn is_assigned(&self) -> bool {
@@ -50,7 +52,7 @@ impl Variable {
         self.domain.possible(x)
     }
     pub fn fail(&self) {
-        self.solver_state.borrow_mut().fail();
+        self.search_state.borrow_mut().fail();
     }
     pub fn remove(&mut self, x: i64) -> bool {
         if self.domain.get_lb() == x {
@@ -61,15 +63,14 @@ impl Variable {
         }
         match self.domain.remove(x) {
             DomainState::Modified => {
+                if self.domain.is_assigned() {
+                    self.notify_listeners(Event::Assigned);
+                }
                 self.notify_listeners(Event::Modified);
-                return true;
+                true
             }
-            DomainState::Failed => {
-                return false;
-            }
-            _ => {
-                return true;
-            }
+            DomainState::Failed => false,
+            _ => true,
         }
     }
     pub fn get_lb(&self) -> i64 {
@@ -78,34 +79,35 @@ impl Variable {
     pub fn get_ub(&self) -> i64 {
         self.domain.get_ub()
     }
+    pub fn get_median(&self) -> i64 {
+        self.domain.get_median()
+    }
     pub fn set_lb(&mut self, x: i64) -> bool {
         match self.domain.set_lb(x) {
             DomainState::Modified => {
+                if self.domain.is_assigned() {
+                    self.notify_listeners(Event::Assigned);
+                }
                 self.notify_listeners(Event::LowerBound);
                 self.notify_listeners(Event::Modified);
-                return true;
+                true
             }
-            DomainState::Failed => {
-                return false;
-            }
-            _ => {
-                return true;
-            }
+            DomainState::Failed => false,
+            _ => true,
         }
     }
     pub fn set_ub(&mut self, x: i64) -> bool {
         match self.domain.set_ub(x) {
             DomainState::Modified => {
+                if self.domain.is_assigned() {
+                    self.notify_listeners(Event::Assigned);
+                }
                 self.notify_listeners(Event::UpperBound);
                 self.notify_listeners(Event::Modified);
-                return true;
+                true
             }
-            DomainState::Failed => {
-                return false;
-            }
-            _ => {
-                return true;
-            }
+            DomainState::Failed => false,
+            _ => true,
         }
     }
     pub fn value(&self) -> i64 {
@@ -114,7 +116,7 @@ impl Variable {
         if lb != ub {
             panic!("attempted to get value of unassigned variable");
         } else {
-            return lb;
+            lb
         }
     }
     pub fn add_listener(&mut self, listener: Rc<RefCell<dyn Propagator>>, event: Event) {
@@ -128,17 +130,20 @@ impl Variable {
                 ref_mut.new_event();
             } else {
                 // we are inside listener's propagate()
-                self.solver_state.borrow_mut().reschedule();
+                self.search_state.borrow_mut().reschedule();
                 continue;
             }
             if !listener.borrow().is_queued() {
                 listener.borrow_mut().enqueue();
-                self.solver_state.borrow_mut().enqueue(listener);
+                self.search_state.borrow_mut().enqueue(listener);
             }
         }
     }
     pub fn rollback(&mut self) {
         self.domain.rollback();
+    }
+    pub fn rollback_all(&mut self) {
+        self.domain.rollback_all();
     }
     pub fn checkpoint(&mut self) {
         self.domain.checkpoint();

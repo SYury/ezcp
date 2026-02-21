@@ -3,7 +3,7 @@ use crate::constraint::Constraint;
 use crate::events::Event;
 use crate::propagator::{Propagator, PropagatorControlBlock};
 use crate::scc::compute_scc;
-use crate::solver::Solver;
+use crate::search::Search;
 use crate::variable::Variable;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -49,13 +49,13 @@ impl Constraint for GlobalCardinalityConstraint {
         }
         true
     }
-    fn create_propagators(&self, solver: &mut Solver) {
+    fn create_propagators(&self, search: &mut Search<'_>) {
         let p = Rc::new(RefCell::new(GlobalCardinalityACPropagator::new(
             self.vars.clone(),
             self.card.clone(),
-            solver.new_propagator_id(),
+            search.new_propagator_id(),
         )));
-        solver.add_propagator(p.clone());
+        search.add_propagator(p.clone());
         p.borrow().listen(p.clone());
     }
 }
@@ -119,7 +119,7 @@ impl Propagator for GlobalCardinalityACPropagator {
         &mut self.pcb
     }
 
-    fn is_idemponent(&self) -> bool {
+    fn is_idempotent(&self) -> bool {
         true
     }
 }

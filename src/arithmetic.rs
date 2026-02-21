@@ -1,7 +1,7 @@
 use crate::constraint::Constraint;
 use crate::events::Event;
 use crate::propagator::{Propagator, PropagatorControlBlock};
-use crate::solver::Solver;
+use crate::search::Search;
 use crate::variable::Variable;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -24,24 +24,22 @@ impl Constraint for SimpleArithmeticConstraint {
     fn satisfied(&self) -> bool {
         if !self.x.borrow().is_assigned() || !self.y.borrow().is_assigned() {
             false
+        } else if self.plus {
+            self.x.borrow().value() + self.y.borrow().value() == self.c
         } else {
-            if self.plus {
-                self.x.borrow().value() + self.y.borrow().value() == self.c
-            } else {
-                self.x.borrow().value() - self.y.borrow().value() == self.c
-            }
+            self.x.borrow().value() - self.y.borrow().value() == self.c
         }
     }
 
-    fn create_propagators(&self, solver: &mut Solver) {
+    fn create_propagators(&self, search: &mut Search<'_>) {
         let p = Rc::new(RefCell::new(SimpleArithmeticPropagator::new(
             self.x.clone(),
             self.y.clone(),
             self.c,
             self.plus,
-            solver.new_propagator_id(),
+            search.new_propagator_id(),
         )));
-        solver.add_propagator(p.clone());
+        search.add_propagator(p.clone());
         p.borrow().listen(p.clone());
     }
 }
@@ -140,10 +138,10 @@ impl Propagator for SimpleArithmeticPropagator {
                     }
                 }
             }
-            while let Some(rem_x) = it_x.next() {
+            for rem_x in it_x {
                 self.x.borrow_mut().remove(rem_x);
             }
-            while let Some(rem_y) = it_y.next() {
+            for rem_y in it_y {
                 self.y.borrow_mut().remove(rem_y);
             }
         } else {
@@ -194,10 +192,10 @@ impl Propagator for SimpleArithmeticPropagator {
                     }
                 }
             }
-            while let Some(rem_x) = it_x.next() {
+            for rem_x in it_x {
                 self.x.borrow_mut().remove(rem_x);
             }
-            while let Some(rem_y) = it_y.next() {
+            for rem_y in it_y {
                 self.y.borrow_mut().remove(rem_y);
             }
         }
@@ -211,7 +209,98 @@ impl Propagator for SimpleArithmeticPropagator {
         &mut self.pcb
     }
 
-    fn is_idemponent(&self) -> bool {
+    fn is_idempotent(&self) -> bool {
         true
+    }
+}
+
+/// x = abs(y)
+pub struct AbsConstraint {
+    x: Rc<RefCell<Variable>>,
+    y: Rc<RefCell<Variable>>,
+}
+
+impl AbsConstraint {
+    pub fn new(x: Rc<RefCell<Variable>>, y: Rc<RefCell<Variable>>) -> Self {
+        Self { x, y }
+    }
+}
+
+impl Constraint for AbsConstraint {
+    fn satisfied(&self) -> bool {
+        if !self.x.borrow().is_assigned() || !self.y.borrow().is_assigned() {
+            return false;
+        }
+        self.x.borrow().value() == self.y.borrow().value().abs()
+    }
+
+    fn create_propagators(&self, search: &mut Search<'_>) {
+        if self.x.as_ptr() == self.y.as_ptr() {
+            return;
+        }
+        let p = Rc::new(RefCell::new(AbsPropagator::new(
+            self.x.clone(),
+            self.y.clone(),
+            search.new_propagator_id(),
+        )));
+        search.add_propagator(p.clone());
+        p.borrow().listen(p.clone());
+    }
+}
+
+pub struct AbsPropagator {
+    pcb: PropagatorControlBlock,
+    x: Rc<RefCell<Variable>>,
+    y: Rc<RefCell<Variable>>,
+}
+
+impl AbsPropagator {
+    pub fn new(x: Rc<RefCell<Variable>>, y: Rc<RefCell<Variable>>, id: usize) -> Self {
+        Self {
+            pcb: PropagatorControlBlock::new(id),
+            x,
+            y,
+        }
+    }
+}
+
+impl Propagator for AbsPropagator {
+    fn listen(&self, self_pointer: Rc<RefCell<dyn Propagator>>) {
+        self.x
+            .borrow_mut()
+            .add_listener(self_pointer.clone(), Event::LowerBound);
+        self.x
+            .borrow_mut()
+            .add_listener(self_pointer.clone(), Event::UpperBound);
+        self.y
+            .borrow_mut()
+            .add_listener(self_pointer.clone(), Event::LowerBound);
+        self.y
+            .borrow_mut()
+            .add_listener(self_pointer, Event::UpperBound);
+    }
+
+    fn propagate(&mut self) {
+        let mut x = self.x.borrow_mut();
+        let mut y = self.y.borrow_mut();
+        if x.get_lb() < 0 {
+            x.set_lb(0);
+        }
+        x.set_lb(y.get_lb().max(-y.get_ub()));
+        x.set_ub(y.get_ub().max(-y.get_lb()));
+        y.set_lb(-x.get_ub());
+        y.set_ub(x.get_ub());
+    }
+
+    fn get_cb(&self) -> &PropagatorControlBlock {
+        &self.pcb
+    }
+
+    fn get_cb_mut(&mut self) -> &mut PropagatorControlBlock {
+        &mut self.pcb
+    }
+
+    fn is_idempotent(&self) -> bool {
+        false
     }
 }

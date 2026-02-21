@@ -1,0 +1,23 @@
+{
+  "variables": {
+    "S" : { "type" : "int", "domain" : [[1, 9]] },
+    "E" : { "type" : "int", "domain" : [[0, 9]] },
+    "N" : { "type" : "int", "domain" : [[0, 9]] },
+    "D" : { "type" : "int", "domain" : [[0, 9]] },
+    "M" : { "type" : "int", "domain" : [[1, 9]] },
+    "O" : { "type" : "int", "domain" : [[0, 9]] },
+    "R" : { "type" : "int", "domain" : [[0, 9]] },
+    "Y" : { "type" : "int", "domain" : [[0, 9]] }
+  },
+  "arrays": {
+    "X_INTRODUCED_4_" : { "a": [10, -900, -9000, 1, -90, 91, 1000, -1] },
+    "X_INTRODUCED_5_" : { "a": ["S", "E", "N", "D", "M", "O", "R", "Y"] }
+  },
+  "constraints": [
+    { "id" : "int_lin_eq", "args" : ["X_INTRODUCED_4_", ["R", "O", "M", "D", "N", "E", "S", "Y"], 0]},
+    { "id" : "ezcp_alldifferent", "args" : ["X_INTRODUCED_5_"]}
+  ],
+  "output": ["S", "E", "N", "D", "M", "O", "R", "Y"],
+  "solve": { "method" : "satisfy" },
+  "version": "1.0"
+}

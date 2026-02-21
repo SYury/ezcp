@@ -1,7 +1,9 @@
 pub mod alldifferent;
 pub mod arithmetic;
+pub mod array;
 pub mod binpacking;
 pub mod bitset;
+pub mod brancher;
 pub mod config;
 pub mod constraint;
 pub mod domain;
@@ -13,7 +15,7 @@ pub mod logic;
 pub mod objective_function;
 pub mod propagator;
 pub mod scc;
+pub mod search;
 pub mod solver;
-pub mod value_selector;
 pub mod variable;
 pub mod variable_selector;

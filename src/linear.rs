@@ -1,7 +1,7 @@
 use crate::constraint::Constraint;
 use crate::events::Event;
 use crate::propagator::{Propagator, PropagatorControlBlock};
-use crate::solver::Solver;
+use crate::search::Search;
 use crate::variable::Variable;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -9,18 +9,18 @@ use std::rc::Rc;
 // assuming q > 0
 fn floor_div(p: i64, q: i64) -> i64 {
     if p > 0 {
-        p/q
+        p / q
     } else {
-        -((-p + q - 1)/q)
+        -((-p + q - 1) / q)
     }
 }
 
 // assuming q > 0
 fn ceil_div(p: i64, q: i64) -> i64 {
     if p > 0 {
-        (p + q - 1)/q
+        (p + q - 1) / q
     } else {
-        -((-p)/q)
+        -((-p) / q)
     }
 }
 
@@ -34,34 +34,30 @@ pub struct LinearInequalityConstraint {
 impl LinearInequalityConstraint {
     pub fn new(x: Vec<Rc<RefCell<Variable>>>, a: Vec<i64>, b: i64) -> Self {
         assert!(x.len() == a.len());
-        Self {
-            x,
-            a,
-            b,
-        }
+        Self { x, a, b }
     }
 }
 
 impl Constraint for LinearInequalityConstraint {
     fn satisfied(&self) -> bool {
         let mut sum = 0;
-        for i in 0..self.x.len() {
-            if !self.x[i].borrow().is_assigned() {
+        for (x, a) in self.x.iter().zip(self.a.iter()) {
+            if !x.borrow().is_assigned() {
                 return false;
             }
-            sum += self.x[i].borrow().value() * self.a[i];
+            sum += x.borrow().value() * (*a);
         }
         sum <= self.b
     }
 
-    fn create_propagators(&self, solver: &mut Solver) {
+    fn create_propagators(&self, search: &mut Search<'_>) {
         let p = Rc::new(RefCell::new(LinearInequalityPropagator::new(
             self.x.clone(),
             self.a.clone(),
             self.b,
-            solver.new_propagator_id(),
+            search.new_propagator_id(),
         )));
-        solver.add_propagator(p.clone());
+        search.add_propagator(p.clone());
         p.borrow().listen(p.clone());
     }
 }
@@ -99,22 +95,25 @@ impl Propagator for LinearInequalityPropagator {
 
     fn propagate(&mut self) {
         let mut lower_sum = 0;
-        for i in 0..self.x.len() {
-            let x = self.x[i].borrow();
-            if self.a[i] > 0 {
-                lower_sum += x.get_lb() * self.a[i];
+        for (xx, a) in self.x.iter().zip(self.a.iter().copied()) {
+            let x = xx.borrow();
+            if a > 0 {
+                lower_sum += x.get_lb() * a;
             } else {
-                lower_sum += x.get_ub() * self.a[i];
+                lower_sum += x.get_ub() * a;
             }
         }
-        for i in 0..self.x.len() {
-            let mut x = self.x[i].borrow_mut();
-            if self.a[i] > 0 {
-                let up = self.b - lower_sum + x.get_lb() * self.a[i];
-                x.set_ub(floor_div(up, self.a[i]));
+        for (xx, a) in self.x.iter_mut().zip(self.a.iter().copied()) {
+            if a == 0 {
+                continue;
+            }
+            let mut x = xx.borrow_mut();
+            if a > 0 {
+                let up = self.b - lower_sum + x.get_lb() * a;
+                x.set_ub(floor_div(up, a));
             } else {
-                let down = -self.b + lower_sum - x.get_ub() * self.a[i];
-                x.set_lb(ceil_div(down, -self.a[i]));
+                let down = -self.b + lower_sum - x.get_ub() * a;
+                x.set_lb(ceil_div(down, -a));
             }
         }
     }
@@ -127,7 +126,112 @@ impl Propagator for LinearInequalityPropagator {
         &mut self.pcb
     }
 
-    fn is_idemponent(&self) -> bool {
+    fn is_idempotent(&self) -> bool {
+        true
+    }
+}
+
+// sum x[i] * a[i] != b
+pub struct LinearNotEqualConstraint {
+    x: Vec<Rc<RefCell<Variable>>>,
+    a: Vec<i64>,
+    b: i64,
+}
+
+impl LinearNotEqualConstraint {
+    pub fn new(x: Vec<Rc<RefCell<Variable>>>, a: Vec<i64>, b: i64) -> Self {
+        assert!(x.len() == a.len());
+        Self { x, a, b }
+    }
+}
+
+impl Constraint for LinearNotEqualConstraint {
+    fn satisfied(&self) -> bool {
+        let mut sum = 0;
+        for (x, a) in self.x.iter().zip(self.a.iter()) {
+            if !x.borrow().is_assigned() {
+                return false;
+            }
+            sum += x.borrow().value() * (*a);
+        }
+        sum != self.b
+    }
+
+    fn create_propagators(&self, search: &mut Search<'_>) {
+        let p = Rc::new(RefCell::new(LinearNotEqualPropagator::new(
+            self.x.clone(),
+            self.a.clone(),
+            self.b,
+            search.new_propagator_id(),
+        )));
+        search.add_propagator(p.clone());
+        p.borrow().listen(p.clone());
+    }
+}
+
+pub struct LinearNotEqualPropagator {
+    pcb: PropagatorControlBlock,
+    x: Vec<Rc<RefCell<Variable>>>,
+    a: Vec<i64>,
+    b: i64,
+}
+
+impl LinearNotEqualPropagator {
+    pub fn new(x: Vec<Rc<RefCell<Variable>>>, a: Vec<i64>, b: i64, id: usize) -> Self {
+        Self {
+            pcb: PropagatorControlBlock::new(id),
+            x,
+            a,
+            b,
+        }
+    }
+}
+
+impl Propagator for LinearNotEqualPropagator {
+    fn listen(&self, self_pointer: Rc<RefCell<dyn Propagator>>) {
+        for (i, x) in self.x.iter().enumerate() {
+            if self.a[i] != 0 {
+                x.borrow_mut()
+                    .add_listener(self_pointer.clone(), Event::Assigned);
+            }
+        }
+    }
+
+    fn propagate(&mut self) {
+        let cnt = self.x.iter().filter(|v| v.borrow().is_assigned()).count();
+        if cnt != self.x.len() - 1 {
+            return;
+        }
+        let (pos, v) = self
+            .x
+            .iter()
+            .enumerate()
+            .find(|v| !v.1.borrow().is_assigned())
+            .unwrap();
+        if self.a[pos] == 0 {
+            return;
+        }
+        let mut rem = self.b;
+        for (a, x) in self.a.iter().copied().zip(self.x.iter()) {
+            if x.borrow().is_assigned() {
+                rem -= a * x.borrow().value();
+            }
+        }
+        let val = rem / self.a[pos];
+        if val * self.a[pos] == rem {
+            v.borrow_mut().remove(val);
+        }
+    }
+
+    fn get_cb(&self) -> &PropagatorControlBlock {
+        &self.pcb
+    }
+
+    fn get_cb_mut(&mut self) -> &mut PropagatorControlBlock {
+        &mut self.pcb
+    }
+
+    fn is_idempotent(&self) -> bool {
         true
     }
 }
