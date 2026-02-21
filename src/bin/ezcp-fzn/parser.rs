@@ -260,6 +260,15 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
         if cons.iter().any(|x| !x.is_object()) {
             return Err("all entries in 'constraints' must be mappings.".to_string());
         }
+        let arg_check = |id: &str, has: usize, need: usize| {
+            if has != need {
+                return Err(format!(
+                    "constraint {} has {} arguments instead of {}.",
+                    id, has, need
+                ));
+            }
+            Ok(())
+        };
         for c0 in cons.iter() {
             let c = c0.as_object().unwrap();
             if let Some(id) = c.get("id").and_then(|s| s.as_str()) {
@@ -284,13 +293,7 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                 }
                 let mut success = false;
                 if id.starts_with("int_lin") || id.starts_with("bool_lin") {
-                    if args.len() != 3 {
-                        return Err(format!(
-                            "constraint {} has {} arguments instead of 3.",
-                            id,
-                            args.len()
-                        ));
-                    }
+                    arg_check(id, args.len(), 3)?;
                     let arr = int_array_or_ref(&args[0], &arrays)
                         .map_err(|s| format!("coefficient array of constraint {}: {}", id, s))?;
                     let cvars = var_array_or_ref(&args[1], &var_arrays, &mut solver)
@@ -336,13 +339,7 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                 if !success {
                     match id {
                         "ezcp_alldifferent" => {
-                            if args.len() != 1 {
-                                return Err(format!(
-                                    "constraint {} has {} arguments instead of 2.",
-                                    id,
-                                    args.len()
-                                ));
-                            }
+                            arg_check(id, args.len(), 1)?;
                             let cvars = var_array_or_ref(&args[0], &var_arrays, &mut solver)
                                 .map_err(|s| {
                                     format!("variable array of constraint {}: {}", id, s)
@@ -350,13 +347,7 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                             solver.add_constraint(Box::new(AllDifferentConstraint::new(cvars)));
                         }
                         "ezcp_bin_packing" => {
-                            if args.len() != 3 {
-                                return Err(format!(
-                                    "constraint {} has {} arguments instead of 3.",
-                                    id,
-                                    args.len()
-                                ));
-                            }
+                            arg_check(id, args.len(), 3)?;
                             let cvars0 = var_array_or_ref(&args[0], &var_arrays, &mut solver)
                                 .map_err(|s| {
                                     format!("load variables of constraint {}: {}", id, s)
@@ -372,13 +363,7 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                             )));
                         }
                         "array_int_element" => {
-                            if args.len() != 3 {
-                                return Err(format!(
-                                    "constraint {} has {} arguments instead of 3.",
-                                    id,
-                                    args.len()
-                                ));
-                            }
+                            arg_check(id, args.len(), 3)?;
                             let index = args[0]
                                 .as_str()
                                 .ok_or_else(|| {
@@ -412,13 +397,7 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                             )));
                         }
                         "array_var_int_element" => {
-                            if args.len() != 3 {
-                                return Err(format!(
-                                    "constraint {} has {} arguments instead of 3.",
-                                    id,
-                                    args.len()
-                                ));
-                            }
+                            arg_check(id, args.len(), 3)?;
                             let index = args[0]
                                 .as_str()
                                 .ok_or_else(|| {
@@ -452,13 +431,7 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                             )));
                         }
                         "int_eq" | "bool_eq" | "bool2int" => {
-                            if args.len() != 2 {
-                                return Err(format!(
-                                    "constraint {} has {} arguments instead of 2.",
-                                    id,
-                                    args.len()
-                                ));
-                            }
+                            arg_check(id, args.len(), 2)?;
                             let cvars = var_array(args, &mut solver)
                                 .map_err(|s| format!("variables of constraint {}: {}", id, s))?;
                             solver.add_constraint(Box::new(LinearInequalityConstraint::new(
@@ -473,13 +446,7 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                             )));
                         }
                         "int_abs" => {
-                            if args.len() != 2 {
-                                return Err(format!(
-                                    "constraint {} has {} arguments instead of 2.",
-                                    id,
-                                    args.len()
-                                ));
-                            }
+                            arg_check(id, args.len(), 2)?;
                             let cvars = var_array(args, &mut solver)
                                 .map_err(|s| format!("variables of constraint {}: {}", id, s))?;
                             solver.add_constraint(Box::new(AbsConstraint::new(
@@ -488,13 +455,7 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                             )));
                         }
                         "int_le" | "bool_le" => {
-                            if args.len() != 2 {
-                                return Err(format!(
-                                    "constraint {} has {} arguments instead of 2.",
-                                    id,
-                                    args.len()
-                                ));
-                            }
+                            arg_check(id, args.len(), 2)?;
                             let cvars = var_array(args, &mut solver)
                                 .map_err(|s| format!("variables of constraint {}: {}", id, s))?;
                             solver.add_constraint(Box::new(LinearInequalityConstraint::new(
@@ -504,13 +465,7 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                             )));
                         }
                         "int_lt" | "bool_lt" => {
-                            if args.len() != 2 {
-                                return Err(format!(
-                                    "constraint {} has {} arguments instead of 2.",
-                                    id,
-                                    args.len()
-                                ));
-                            }
+                            arg_check(id, args.len(), 2)?;
                             let cvars = var_array(args, &mut solver)
                                 .map_err(|s| format!("variables of constraint {}: {}", id, s))?;
                             solver.add_constraint(Box::new(LinearInequalityConstraint::new(
@@ -520,13 +475,7 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                             )));
                         }
                         "int_ne" => {
-                            if args.len() != 2 {
-                                return Err(format!(
-                                    "constraint {} has {} arguments instead of 2.",
-                                    id,
-                                    args.len()
-                                ));
-                            }
+                            arg_check(id, args.len(), 2)?;
                             let cvars = var_array(args, &mut solver)
                                 .map_err(|s| format!("variables of constraint {}: {}", id, s))?;
                             solver.add_constraint(Box::new(LinearNotEqualConstraint::new(
@@ -536,13 +485,7 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                             )));
                         }
                         "int_plus" => {
-                            if args.len() != 3 {
-                                return Err(format!(
-                                    "constraint {} has {} arguments instead of 3.",
-                                    id,
-                                    args.len()
-                                ));
-                            }
+                            arg_check(id, args.len(), 3)?;
                             let cvars = var_array(args, &mut solver)
                                 .map_err(|s| format!("variables of constraint {}: {}", id, s))?;
                             solver.add_constraint(Box::new(LinearInequalityConstraint::new(
@@ -557,13 +500,7 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                             )));
                         }
                         "bool_not" => {
-                            if args.len() != 2 {
-                                return Err(format!(
-                                    "constraint {} has {} arguments instead of 2.",
-                                    id,
-                                    args.len()
-                                ));
-                            }
+                            arg_check(id, args.len(), 2)?;
                             let cvars = var_array(args, &mut solver)
                                 .map_err(|s| format!("variables of constraint {}: {}", id, s))?;
                             solver.add_constraint(Box::new(NegateConstraint::new(
@@ -572,13 +509,7 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                             )));
                         }
                         "bool_and" => {
-                            if args.len() != 3 {
-                                return Err(format!(
-                                    "constraint {} has {} arguments instead of 3.",
-                                    id,
-                                    args.len()
-                                ));
-                            }
+                            arg_check(id, args.len(), 3)?;
                             let cvars = var_array(args, &mut solver)
                                 .map_err(|s| format!("variables of constraint {}: {}", id, s))?;
                             solver.add_constraint(Box::new(AndConstraint::new(
@@ -587,13 +518,7 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                             )));
                         }
                         "bool_or" => {
-                            if args.len() != 3 {
-                                return Err(format!(
-                                    "constraint {} has {} arguments instead of 3.",
-                                    id,
-                                    args.len()
-                                ));
-                            }
+                            arg_check(id, args.len(), 3)?;
                             let cvars = var_array(args, &mut solver)
                                 .map_err(|s| format!("variables of constraint {}: {}", id, s))?;
                             solver.add_constraint(Box::new(OrConstraint::new(
@@ -603,14 +528,7 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                         }
                         "bool_clause" | "bool_clause_reif" => {
                             let need_args = if id == "bool_clause" { 2 } else { 3 };
-                            if args.len() != need_args {
-                                return Err(format!(
-                                    "constraint {} has {} arguments instead of {}.",
-                                    id,
-                                    args.len(),
-                                    need_args
-                                ));
-                            }
+                            arg_check(id, args.len(), need_args)?;
                             let cvars0 = var_array_or_ref(&args[0], &var_arrays, &mut solver)
                                 .map_err(|s| format!("variables of constraint {}: {}", id, s))?;
                             let cvars1 = var_array_or_ref(&args[1], &var_arrays, &mut solver)
