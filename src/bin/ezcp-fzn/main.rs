@@ -29,12 +29,29 @@ fn main() {
             match item {
                 Output::Var(var) => {
                     let v = var.borrow();
-                    println!("{} = {};", &v.name, v.value());
+                    if mz.bools.contains(&v.name) {
+                        println!(
+                            "{} = {};",
+                            &v.name,
+                            if v.value() == 0 { "false" } else { "true" }
+                        );
+                    } else {
+                        println!("{} = {};", &v.name, v.value());
+                    }
                 }
                 Output::Array((name, a)) => {
                     print!("{} = array1d(1..{},", name, a.len());
                     for (i, var) in a.iter().enumerate() {
-                        print!("{}{}", if i == 0 { '[' } else { ',' }, var.borrow().value());
+                        let v = var.borrow();
+                        if mz.bools.contains(&v.name) {
+                            print!(
+                                "{}{}",
+                                if i == 0 { '[' } else { ',' },
+                                if v.value() == 0 { "false" } else { "true" }
+                            );
+                        } else {
+                            print!("{}{}", if i == 0 { '[' } else { ',' }, v.value());
+                        }
                     }
                     println!("]);");
                 }

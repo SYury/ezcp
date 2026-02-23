@@ -18,7 +18,7 @@ use ezcp::variable_selector::{
 };
 use std::boxed::Box;
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 pub enum Output {
@@ -30,6 +30,7 @@ pub struct MinizincParseResult {
     pub solver: Solver,
     pub output: Vec<Output>,
     pub config: Config,
+    pub bools: HashSet<String>,
 }
 
 fn int_array_or_ref(
@@ -127,6 +128,7 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
     let mut var_arrays = HashMap::<String, Vec<Rc<RefCell<Variable>>>>::new();
     let mut output = Vec::<Output>::new();
     let mut config = Config::default();
+    let mut bools = HashSet::new();
 
     if let Some(var_json0) = json.get("variables") {
         if let Some(var_json) = var_json0.as_object() {
@@ -181,6 +183,7 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                                 }
                             }
                             "bool" => {
+                                bools.insert(name.clone());
                                 if var_inner.contains_key("domain") {
                                     return Err("Oops, it seems that bool vars in flatzinc may have domain... Parser must be fixed.".to_string());
                                 } else {
@@ -196,6 +199,17 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                         }
                     } else {
                         return Err(format!("variable {} has non-string type record.", name));
+                    }
+                    if let Some(i) = var_inner.get("introduced").and_then(|x| x.as_bool()) {
+                        if !i {
+                            config
+                                .branchable_vars
+                                .push(solver.get_variable_by_name(name).unwrap());
+                        }
+                    } else {
+                        config
+                            .branchable_vars
+                            .push(solver.get_variable_by_name(name).unwrap());
                     }
                 } else {
                     return Err(format!("info for variable {} is not a mapping.", name));
@@ -840,5 +854,6 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
         solver,
         output,
         config,
+        bools,
     })
 }

@@ -303,6 +303,7 @@ impl Iterator for Search<'_> {
                         for v in self.variables {
                             v.borrow_mut().rollback();
                         }
+                        self.restore_propagators(&node);
                         self.stack.pop();
                         continue;
                     }

@@ -50,6 +50,19 @@ impl Constraint for LinearInequalityConstraint {
         sum <= self.b
     }
 
+    fn failed(&self) -> bool {
+        let mut lb = 0;
+        for (xx, a) in self.x.iter().zip(self.a.iter().copied()) {
+            let x = xx.borrow();
+            if a > 0 {
+                lb += x.get_lb() * a;
+            } else {
+                lb += x.get_ub() * a;
+            }
+        }
+        lb > self.b
+    }
+
     fn create_propagators(&self, index0: usize) -> Vec<Rc<RefCell<dyn Propagator>>> {
         vec![Rc::new(RefCell::new(LinearInequalityPropagator::new(
             self.x.clone(),
@@ -172,6 +185,22 @@ impl Constraint for LinearNotEqualConstraint {
         sum != self.b
     }
 
+    fn failed(&self) -> bool {
+        let mut lb = 0;
+        let mut ub = 0;
+        for (xx, a) in self.x.iter().zip(self.a.iter().copied()) {
+            let x = xx.borrow();
+            if a > 0 {
+                lb += x.get_lb() * a;
+                ub += x.get_ub() * a;
+            } else {
+                lb += x.get_ub() * a;
+                ub += x.get_lb() * a;
+            }
+        }
+        lb == ub && lb == self.b
+    }
+
     fn create_propagators(&self, index0: usize) -> Vec<Rc<RefCell<dyn Propagator>>> {
         vec![Rc::new(RefCell::new(LinearNotEqualPropagator::new(
             self.x.clone(),
@@ -287,6 +316,22 @@ impl Constraint for LinearEqualityConstraint {
             sum += x.borrow().value() * (*a);
         }
         sum == self.b
+    }
+
+    fn failed(&self) -> bool {
+        let mut lb = 0;
+        let mut ub = 0;
+        for (xx, a) in self.x.iter().zip(self.a.iter().copied()) {
+            let x = xx.borrow();
+            if a > 0 {
+                lb += x.get_lb() * a;
+                ub += x.get_ub() * a;
+            } else {
+                lb += x.get_ub() * a;
+                ub += x.get_lb() * a;
+            }
+        }
+        ub < self.b || lb > self.b
     }
 
     fn create_propagators(&self, index0: usize) -> Vec<Rc<RefCell<dyn Propagator>>> {

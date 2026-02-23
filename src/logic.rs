@@ -236,10 +236,17 @@ impl Propagator for OrPropagator {
             let result = self.result.borrow().value();
             if result == 1 {
                 let mut ones = 0;
+                let mut one_ass = false;
                 for v in &self.vars {
                     if v.borrow().possible(1) {
                         ones += 1;
+                        if v.borrow().is_assigned() {
+                            one_ass = true;
+                        }
                     }
+                }
+                if one_ass {
+                    return PropagatorState::Terminated;
                 }
                 if ones == 0 {
                     self.result.borrow_mut().fail();
@@ -251,6 +258,7 @@ impl Propagator for OrPropagator {
                             v.borrow_mut().assign(1);
                         }
                     }
+                    return PropagatorState::Terminated;
                 }
             } else {
                 for v in &self.vars {
