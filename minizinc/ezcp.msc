@@ -1,5 +1,5 @@
 name = "ezcp";
-version = "0.0.2";
+version = "0.0.3";
 id = "org.ezcp.ezcp";
 executable = "ezcp-fzn";
 tags = ["cp"];

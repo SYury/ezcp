@@ -14,6 +14,7 @@ pub mod linear;
 pub mod logic;
 pub mod objective_function;
 pub mod propagator;
+pub mod reify;
 pub mod scc;
 pub mod search;
 pub mod solver;

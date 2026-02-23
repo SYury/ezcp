@@ -4,9 +4,12 @@ use ezcp::array::{ArrayIntElementConstraint, ArrayVarElementConstraint};
 use ezcp::binpacking::BinPackingConstraint;
 use ezcp::brancher::{MaxValueBrancher, MedianValueBrancher, MinValueBrancher, SplitBrancher};
 use ezcp::config::Config;
-use ezcp::linear::{LinearInequalityConstraint, LinearNotEqualConstraint};
+use ezcp::linear::{
+    LinearEqualityConstraint, LinearInequalityConstraint, LinearNotEqualConstraint,
+};
 use ezcp::logic::{AndConstraint, NegateConstraint, OrConstraint};
 use ezcp::objective_function::SingleVariableObjective;
+use ezcp::reify::ReifiedConstraint;
 use ezcp::solver::Solver;
 use ezcp::variable::Variable;
 use ezcp::variable_selector::{
@@ -288,12 +291,10 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                 {
                     return Err("Flatzinc not implemented error: float constraints are currently unsupported.".to_string());
                 }
-                if id.ends_with("_reif") && id != "bool_clause_reif" {
-                    return Err("Flatzinc not implemented error: reified constraints are currently unsupported.".to_string());
-                }
                 let mut success = false;
                 if id.starts_with("int_lin") || id.starts_with("bool_lin") {
-                    arg_check(id, args.len(), 3)?;
+                    let need_args = if id.ends_with("_reif") { 4 } else { 3 };
+                    arg_check(id, args.len(), need_args)?;
                     let arr = int_array_or_ref(&args[0], &arrays)
                         .map_err(|s| format!("coefficient array of constraint {}: {}", id, s))?;
                     let cvars = var_array_or_ref(&args[1], &var_arrays, &mut solver)
@@ -304,31 +305,114 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                     match id {
                         "int_lin_eq" | "bool_lin_eq" => {
                             success = true;
-                            solver.add_constraint(Box::new(LinearInequalityConstraint::new(
+                            solver.add_constraint(Box::new(LinearEqualityConstraint::new(
                                 cvars.clone(),
                                 arr.clone(),
                                 bound,
                             )));
-                            solver.add_constraint(Box::new(LinearInequalityConstraint::new(
-                                cvars,
-                                arr.into_iter().map(|x| -x).collect::<Vec<_>>(),
-                                -bound,
+                        }
+                        "int_lin_eq_reif" | "bool_lin_eq_reif" => {
+                            success = true;
+                            let b = args[3]
+                                .as_str()
+                                .ok_or_else(|| {
+                                    format!(
+                                        "reified variable name of constraint {} is not a string",
+                                        id
+                                    )
+                                })
+                                .and_then(|s| {
+                                    solver.get_variable_by_name(s).ok_or_else(|| {
+                                        format!(
+                                            "reified variable {} of constraint {} does not exist",
+                                            s, id
+                                        )
+                                    })
+                                })?;
+                            solver.add_constraint(Box::new(ReifiedConstraint::new(
+                                b,
+                                Rc::new(RefCell::new(LinearEqualityConstraint::new(
+                                    cvars.clone(),
+                                    arr.clone(),
+                                    bound,
+                                ))),
+                                Rc::new(RefCell::new(LinearNotEqualConstraint::new(
+                                    cvars, arr, bound,
+                                ))),
                             )));
                         }
                         "int_lin_le" | "bool_lin_le" => {
                             success = true;
                             solver.add_constraint(Box::new(LinearInequalityConstraint::new(
-                                cvars,
-                                arr.clone(),
-                                bound,
+                                cvars, arr, bound,
+                            )));
+                        }
+                        "int_lin_le_reif" | "bool_lin_le_reif" => {
+                            success = true;
+                            let b = args[3]
+                                .as_str()
+                                .ok_or_else(|| {
+                                    format!(
+                                        "reified variable name of constraint {} is not a string",
+                                        id
+                                    )
+                                })
+                                .and_then(|s| {
+                                    solver.get_variable_by_name(s).ok_or_else(|| {
+                                        format!(
+                                            "reified variable {} of constraint {} does not exist",
+                                            s, id
+                                        )
+                                    })
+                                })?;
+                            solver.add_constraint(Box::new(ReifiedConstraint::new(
+                                b,
+                                Rc::new(RefCell::new(LinearInequalityConstraint::new(
+                                    cvars.clone(),
+                                    arr.clone(),
+                                    bound,
+                                ))),
+                                Rc::new(RefCell::new(LinearInequalityConstraint::new(
+                                    cvars,
+                                    arr.into_iter().map(|x| -x).collect::<Vec<_>>(),
+                                    -bound - 1,
+                                ))),
                             )));
                         }
                         "int_lin_ne" => {
                             success = true;
                             solver.add_constraint(Box::new(LinearNotEqualConstraint::new(
-                                cvars,
-                                arr.clone(),
-                                bound,
+                                cvars, arr, bound,
+                            )));
+                        }
+                        "int_lin_ne_reif" => {
+                            success = true;
+                            let b = args[3]
+                                .as_str()
+                                .ok_or_else(|| {
+                                    format!(
+                                        "reified variable name of constraint {} is not a string",
+                                        id
+                                    )
+                                })
+                                .and_then(|s| {
+                                    solver.get_variable_by_name(s).ok_or_else(|| {
+                                        format!(
+                                            "reified variable {} of constraint {} does not exist",
+                                            s, id
+                                        )
+                                    })
+                                })?;
+                            solver.add_constraint(Box::new(ReifiedConstraint::new(
+                                b,
+                                Rc::new(RefCell::new(LinearNotEqualConstraint::new(
+                                    cvars.clone(),
+                                    arr.clone(),
+                                    bound,
+                                ))),
+                                Rc::new(RefCell::new(LinearEqualityConstraint::new(
+                                    cvars, arr, bound,
+                                ))),
                             )));
                         }
                         _ => {
@@ -434,15 +518,28 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                             arg_check(id, args.len(), 2)?;
                             let cvars = var_array(args, &mut solver)
                                 .map_err(|s| format!("variables of constraint {}: {}", id, s))?;
-                            solver.add_constraint(Box::new(LinearInequalityConstraint::new(
+                            solver.add_constraint(Box::new(LinearEqualityConstraint::new(
                                 cvars.clone(),
                                 vec![1, -1],
                                 0,
                             )));
-                            solver.add_constraint(Box::new(LinearInequalityConstraint::new(
-                                cvars,
-                                vec![-1, 1],
-                                0,
+                        }
+                        "int_eq_reif" | "bool_eq_reif" => {
+                            arg_check(id, args.len(), 3)?;
+                            let cvars = var_array(args, &mut solver)
+                                .map_err(|s| format!("variables of constraint {}: {}", id, s))?;
+                            solver.add_constraint(Box::new(ReifiedConstraint::new(
+                                cvars[2].clone(),
+                                Rc::new(RefCell::new(LinearEqualityConstraint::new(
+                                    cvars[..2].to_vec(),
+                                    vec![1, -1],
+                                    0,
+                                ))),
+                                Rc::new(RefCell::new(LinearNotEqualConstraint::new(
+                                    cvars[..2].to_vec(),
+                                    vec![1, -1],
+                                    0,
+                                ))),
                             )));
                         }
                         "int_abs" => {
@@ -464,6 +561,24 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                                 0,
                             )));
                         }
+                        "int_le_reif" | "bool_le_reif" => {
+                            arg_check(id, args.len(), 3)?;
+                            let cvars = var_array(args, &mut solver)
+                                .map_err(|s| format!("variables of constraint {}: {}", id, s))?;
+                            solver.add_constraint(Box::new(ReifiedConstraint::new(
+                                cvars[2].clone(),
+                                Rc::new(RefCell::new(LinearInequalityConstraint::new(
+                                    cvars[..2].to_vec(),
+                                    vec![1, -1],
+                                    0,
+                                ))),
+                                Rc::new(RefCell::new(LinearInequalityConstraint::new(
+                                    cvars[..2].to_vec(),
+                                    vec![-1, 1],
+                                    -1,
+                                ))),
+                            )));
+                        }
                         "int_lt" | "bool_lt" => {
                             arg_check(id, args.len(), 2)?;
                             let cvars = var_array(args, &mut solver)
@@ -474,6 +589,24 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                                 -1,
                             )));
                         }
+                        "int_lt_reif" | "bool_lt_reif" => {
+                            arg_check(id, args.len(), 3)?;
+                            let cvars = var_array(args, &mut solver)
+                                .map_err(|s| format!("variables of constraint {}: {}", id, s))?;
+                            solver.add_constraint(Box::new(ReifiedConstraint::new(
+                                cvars[2].clone(),
+                                Rc::new(RefCell::new(LinearInequalityConstraint::new(
+                                    cvars[..2].to_vec(),
+                                    vec![1, -1],
+                                    -1,
+                                ))),
+                                Rc::new(RefCell::new(LinearInequalityConstraint::new(
+                                    cvars[..2].to_vec(),
+                                    vec![-1, 1],
+                                    0,
+                                ))),
+                            )));
+                        }
                         "int_ne" => {
                             arg_check(id, args.len(), 2)?;
                             let cvars = var_array(args, &mut solver)
@@ -482,6 +615,24 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                                 cvars,
                                 vec![1, -1],
                                 0,
+                            )));
+                        }
+                        "int_ne_reif" => {
+                            arg_check(id, args.len(), 3)?;
+                            let cvars = var_array(args, &mut solver)
+                                .map_err(|s| format!("variables of constraint {}: {}", id, s))?;
+                            solver.add_constraint(Box::new(ReifiedConstraint::new(
+                                cvars[2].clone(),
+                                Rc::new(RefCell::new(LinearNotEqualConstraint::new(
+                                    cvars[..2].to_vec(),
+                                    vec![1, -1],
+                                    0,
+                                ))),
+                                Rc::new(RefCell::new(LinearEqualityConstraint::new(
+                                    cvars[..2].to_vec(),
+                                    vec![1, -1],
+                                    0,
+                                ))),
                             )));
                         }
                         "int_plus" => {

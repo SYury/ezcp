@@ -48,6 +48,9 @@ impl Variable {
     pub fn is_assigned(&self) -> bool {
         self.domain.is_assigned()
     }
+    pub fn is_boolean(&self) -> bool {
+        self.domain.get_lb() >= 0 && self.domain.get_ub() <= 1
+    }
     pub fn possible(&self, x: i64) -> bool {
         self.domain.possible(x)
     }
@@ -119,10 +122,24 @@ impl Variable {
             lb
         }
     }
+    pub fn try_value(&self) -> Option<i64> {
+        let lb = self.domain.get_lb();
+        let ub = self.domain.get_ub();
+        if lb != ub {
+            None
+        } else {
+            Some(lb)
+        }
+    }
     pub fn add_listener(&mut self, listener: Rc<RefCell<dyn Propagator>>, event: Event) {
         let id = event_index(&event);
         let list_id = listener.borrow().get_id();
         self.listeners[id].insert(list_id, listener);
+    }
+    pub fn remove_listener(&mut self, listener: Rc<RefCell<dyn Propagator>>, event: Event) {
+        let id = event_index(&event);
+        let list_id = listener.borrow().get_id();
+        self.listeners[id].remove(&list_id);
     }
     pub fn notify_listeners(&mut self, event: Event) {
         for (_, listener) in self.listeners[event_index(&event)].drain() {

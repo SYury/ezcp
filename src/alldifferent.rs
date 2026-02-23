@@ -1,6 +1,6 @@
 use crate::constraint::Constraint;
 use crate::events::Event;
-use crate::propagator::{Propagator, PropagatorControlBlock};
+use crate::propagator::{Propagator, PropagatorControlBlock, PropagatorState};
 use crate::search::Search;
 use crate::variable::Variable;
 use std::cell::RefCell;
@@ -32,13 +32,24 @@ impl Constraint for AllDifferentConstraint {
         }
         true
     }
-    fn create_propagators(&self, search: &mut Search<'_>) {
-        let p = Rc::new(RefCell::new(AllDifferentACPropagator::new(
+
+    fn failed(&self) -> bool {
+        let mut vals = HashSet::new();
+        for v in &self.vars {
+            if let Some(x) = v.borrow().try_value() {
+                if !vals.insert(x) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    fn create_propagators(&self, index0: usize) -> Vec<Rc<RefCell<dyn Propagator>>> {
+        vec![Rc::new(RefCell::new(AllDifferentACPropagator::new(
             self.vars.clone(),
-            search.new_propagator_id(),
-        )));
-        search.add_propagator(p.clone());
-        p.borrow().listen(p.clone());
+            index0,
+        )))]
     }
 }
 
@@ -411,7 +422,18 @@ impl Propagator for AllDifferentACPropagator {
         }
     }
 
-    fn propagate(&mut self) {
+    fn unlisten(&self, self_pointer: Rc<RefCell<dyn Propagator>>) {
+        for v in &self.vars {
+            v.borrow_mut()
+                .remove_listener(self_pointer.clone(), Event::Modified);
+        }
+    }
+
+    fn propagate(
+        &mut self,
+        _self_pointer: Rc<RefCell<dyn Propagator>>,
+        _search: &mut Search<'_>,
+    ) -> PropagatorState {
         let mut m = ACMatching::new(&self.vars, None);
         if let Some(g) = m.matching(MatchingReturnValue::MatchingGraph) {
             let mut scc = SCC::new(g);
@@ -424,6 +446,7 @@ impl Propagator for AllDifferentACPropagator {
         } else {
             self.vars[0].borrow().fail();
         }
+        PropagatorState::Normal
     }
 
     fn get_cb(&self) -> &PropagatorControlBlock {

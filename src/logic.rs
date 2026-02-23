@@ -1,6 +1,6 @@
 use crate::constraint::Constraint;
 use crate::events::Event;
-use crate::propagator::{Propagator, PropagatorControlBlock};
+use crate::propagator::{Propagator, PropagatorControlBlock, PropagatorState};
 use crate::search::Search;
 use crate::variable::Variable;
 use std::cell::RefCell;
@@ -37,14 +37,12 @@ impl Constraint for AndConstraint {
         result != 0
     }
 
-    fn create_propagators(&self, search: &mut Search<'_>) {
-        let p = Rc::new(RefCell::new(AndPropagator::new(
+    fn create_propagators(&self, index0: usize) -> Vec<Rc<RefCell<dyn Propagator>>> {
+        vec![Rc::new(RefCell::new(AndPropagator::new(
             self.result.clone(),
             self.vars.clone(),
-            search.new_propagator_id(),
-        )));
-        search.add_propagator(p.clone());
-        p.borrow().listen(p.clone());
+            index0,
+        )))]
     }
 }
 
@@ -75,7 +73,21 @@ impl Propagator for AndPropagator {
         }
     }
 
-    fn propagate(&mut self) {
+    fn unlisten(&self, self_pointer: Rc<RefCell<dyn Propagator>>) {
+        self.result
+            .borrow_mut()
+            .remove_listener(self_pointer.clone(), Event::Modified);
+        for v in &self.vars {
+            v.borrow_mut()
+                .remove_listener(self_pointer.clone(), Event::Modified);
+        }
+    }
+
+    fn propagate(
+        &mut self,
+        _self_pointer: Rc<RefCell<dyn Propagator>>,
+        _search: &mut Search<'_>,
+    ) -> PropagatorState {
         if self.result.borrow().is_assigned() {
             let result = self.result.borrow().value();
             if result == 1 {
@@ -122,6 +134,7 @@ impl Propagator for AndPropagator {
                 self.result.borrow_mut().remove(1);
             }
         }
+        PropagatorState::Normal
     }
 
     fn get_cb(&self) -> &PropagatorControlBlock {
@@ -168,14 +181,12 @@ impl Constraint for OrConstraint {
         result == 0
     }
 
-    fn create_propagators(&self, search: &mut Search<'_>) {
-        let p = Rc::new(RefCell::new(OrPropagator::new(
+    fn create_propagators(&self, index0: usize) -> Vec<Rc<RefCell<dyn Propagator>>> {
+        vec![Rc::new(RefCell::new(OrPropagator::new(
             self.result.clone(),
             self.vars.clone(),
-            search.new_propagator_id(),
-        )));
-        search.add_propagator(p.clone());
-        p.borrow().listen(p.clone());
+            index0,
+        )))]
     }
 }
 
@@ -206,7 +217,21 @@ impl Propagator for OrPropagator {
         }
     }
 
-    fn propagate(&mut self) {
+    fn unlisten(&self, self_pointer: Rc<RefCell<dyn Propagator>>) {
+        self.result
+            .borrow_mut()
+            .remove_listener(self_pointer.clone(), Event::Modified);
+        for v in &self.vars {
+            v.borrow_mut()
+                .remove_listener(self_pointer.clone(), Event::Modified);
+        }
+    }
+
+    fn propagate(
+        &mut self,
+        _self_pointer: Rc<RefCell<dyn Propagator>>,
+        _search: &mut Search<'_>,
+    ) -> PropagatorState {
         if self.result.borrow().is_assigned() {
             let result = self.result.borrow().value();
             if result == 1 {
@@ -218,7 +243,7 @@ impl Propagator for OrPropagator {
                 }
                 if ones == 0 {
                     self.result.borrow_mut().fail();
-                    return;
+                    return PropagatorState::Normal;
                 }
                 if ones == 1 {
                     for v in &self.vars {
@@ -250,6 +275,7 @@ impl Propagator for OrPropagator {
                 self.result.borrow_mut().remove(1);
             }
         }
+        PropagatorState::Normal
     }
 
     fn get_cb(&self) -> &PropagatorControlBlock {
@@ -286,14 +312,12 @@ impl Constraint for NegateConstraint {
         }
     }
 
-    fn create_propagators(&self, search: &mut Search) {
-        let p = Rc::new(RefCell::new(NegatePropagator::new(
+    fn create_propagators(&self, index0: usize) -> Vec<Rc<RefCell<dyn Propagator>>> {
+        vec![Rc::new(RefCell::new(NegatePropagator::new(
             self.x.clone(),
             self.y.clone(),
-            search.new_propagator_id(),
-        )));
-        search.add_propagator(p.clone());
-        p.borrow().listen(p.clone());
+            index0,
+        )))]
     }
 }
 
@@ -323,7 +347,20 @@ impl Propagator for NegatePropagator {
             .add_listener(self_pointer.clone(), Event::Modified);
     }
 
-    fn propagate(&mut self) {
+    fn unlisten(&self, self_pointer: Rc<RefCell<dyn Propagator>>) {
+        self.x
+            .borrow_mut()
+            .remove_listener(self_pointer.clone(), Event::Modified);
+        self.y
+            .borrow_mut()
+            .remove_listener(self_pointer.clone(), Event::Modified);
+    }
+
+    fn propagate(
+        &mut self,
+        _self_pointer: Rc<RefCell<dyn Propagator>>,
+        _search: &mut Search<'_>,
+    ) -> PropagatorState {
         for val in 0..2 {
             if !self.x.borrow().possible(val) {
                 self.y.borrow_mut().remove(val ^ 1);
@@ -334,6 +371,7 @@ impl Propagator for NegatePropagator {
                 self.x.borrow_mut().remove(val ^ 1);
             }
         }
+        PropagatorState::Normal
     }
 
     fn get_cb(&self) -> &PropagatorControlBlock {

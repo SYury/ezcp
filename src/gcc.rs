@@ -1,7 +1,7 @@
 use crate::alldifferent::{ACMatching, MatchingReturnValue};
 use crate::constraint::Constraint;
 use crate::events::Event;
-use crate::propagator::{Propagator, PropagatorControlBlock};
+use crate::propagator::{Propagator, PropagatorControlBlock, PropagatorState};
 use crate::scc::compute_scc;
 use crate::search::Search;
 use crate::variable::Variable;
@@ -49,14 +49,12 @@ impl Constraint for GlobalCardinalityConstraint {
         }
         true
     }
-    fn create_propagators(&self, search: &mut Search<'_>) {
-        let p = Rc::new(RefCell::new(GlobalCardinalityACPropagator::new(
+    fn create_propagators(&self, index0: usize) -> Vec<Rc<RefCell<dyn Propagator>>> {
+        vec![Rc::new(RefCell::new(GlobalCardinalityACPropagator::new(
             self.vars.clone(),
             self.card.clone(),
-            search.new_propagator_id(),
-        )));
-        search.add_propagator(p.clone());
-        p.borrow().listen(p.clone());
+            index0,
+        )))]
     }
 }
 
@@ -84,7 +82,18 @@ impl Propagator for GlobalCardinalityACPropagator {
         }
     }
 
-    fn propagate(&mut self) {
+    fn unlisten(&self, self_pointer: Rc<RefCell<dyn Propagator>>) {
+        for v in &self.vars {
+            v.borrow_mut()
+                .remove_listener(self_pointer.clone(), Event::Modified);
+        }
+    }
+
+    fn propagate(
+        &mut self,
+        _self_pointer: Rc<RefCell<dyn Propagator>>,
+        _search: &mut Search<'_>,
+    ) -> PropagatorState {
         let mut m = ACMatching::new(&self.vars, Some(&self.card));
         if let Some(g) = m.matching(MatchingReturnValue::FlowGraph) {
             let scc = compute_scc(&g);
@@ -109,6 +118,7 @@ impl Propagator for GlobalCardinalityACPropagator {
         } else {
             self.vars[0].borrow().fail();
         }
+        PropagatorState::Normal
     }
 
     fn get_cb(&self) -> &PropagatorControlBlock {

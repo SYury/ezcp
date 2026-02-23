@@ -1,6 +1,6 @@
 use crate::constraint::Constraint;
 use crate::events::Event;
-use crate::propagator::{Propagator, PropagatorControlBlock};
+use crate::propagator::{Propagator, PropagatorControlBlock, PropagatorState};
 use crate::search::Search;
 use crate::variable::Variable;
 use std::cell::RefCell;
@@ -48,15 +48,13 @@ impl Constraint for BinPackingConstraint {
         true
     }
 
-    fn create_propagators(&self, search: &mut Search<'_>) {
-        let p = Rc::new(RefCell::new(BinPackingPropagator::new(
+    fn create_propagators(&self, index0: usize) -> Vec<Rc<RefCell<dyn Propagator>>> {
+        vec![Rc::new(RefCell::new(BinPackingPropagator::new(
             self.assignment.clone(),
             self.load.clone(),
             self.weight.clone(),
-            search.new_propagator_id(),
-        )));
-        search.add_propagator(p.clone());
-        p.borrow().listen(p.clone());
+            index0,
+        )))]
     }
 }
 
@@ -205,7 +203,22 @@ impl Propagator for BinPackingPropagator {
         }
     }
 
-    fn propagate(&mut self) {
+    fn unlisten(&self, self_pointer: Rc<RefCell<dyn Propagator>>) {
+        for v in &self.assignment {
+            v.borrow_mut()
+                .remove_listener(self_pointer.clone(), Event::Modified);
+        }
+        for v in &self.load {
+            v.borrow_mut()
+                .remove_listener(self_pointer.clone(), Event::Modified);
+        }
+    }
+
+    fn propagate(
+        &mut self,
+        _self_pointer: Rc<RefCell<dyn Propagator>>,
+        _search: &mut Search<'_>,
+    ) -> PropagatorState {
         let items = self.assignment.len();
         let bins = self.load.len();
         let mut possible = vec![Vec::<usize>::new(); bins];
@@ -279,7 +292,7 @@ impl Propagator for BinPackingPropagator {
                 &mut r1,
             ) {
                 load.fail();
-                return;
+                return PropagatorState::Normal;
             }
             if no_sum(
                 &c,
@@ -352,7 +365,7 @@ impl Propagator for BinPackingPropagator {
         fake.sort();
         fake.reverse();
         if unpacked.is_empty() && fake.is_empty() {
-            return;
+            return PropagatorState::Normal;
         }
         let mut all = Vec::with_capacity(unpacked.len() + fake.len());
         let mut i = 0;
@@ -369,6 +382,7 @@ impl Propagator for BinPackingPropagator {
         if bound(&all, bin_capacity) > bins {
             self.assignment[0].borrow().fail();
         }
+        PropagatorState::Normal
     }
 
     fn get_cb(&self) -> &PropagatorControlBlock {

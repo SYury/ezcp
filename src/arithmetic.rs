@@ -1,6 +1,6 @@
 use crate::constraint::Constraint;
 use crate::events::Event;
-use crate::propagator::{Propagator, PropagatorControlBlock};
+use crate::propagator::{Propagator, PropagatorControlBlock, PropagatorState};
 use crate::search::Search;
 use crate::variable::Variable;
 use std::cell::RefCell;
@@ -31,16 +31,14 @@ impl Constraint for SimpleArithmeticConstraint {
         }
     }
 
-    fn create_propagators(&self, search: &mut Search<'_>) {
-        let p = Rc::new(RefCell::new(SimpleArithmeticPropagator::new(
+    fn create_propagators(&self, index0: usize) -> Vec<Rc<RefCell<dyn Propagator>>> {
+        vec![Rc::new(RefCell::new(SimpleArithmeticPropagator::new(
             self.x.clone(),
             self.y.clone(),
             self.c,
             self.plus,
-            search.new_propagator_id(),
-        )));
-        search.add_propagator(p.clone());
-        p.borrow().listen(p.clone());
+            index0,
+        )))]
     }
 }
 
@@ -80,7 +78,20 @@ impl Propagator for SimpleArithmeticPropagator {
             .add_listener(self_pointer, Event::Modified);
     }
 
-    fn propagate(&mut self) {
+    fn unlisten(&self, self_pointer: Rc<RefCell<dyn Propagator>>) {
+        self.x
+            .borrow_mut()
+            .remove_listener(self_pointer.clone(), Event::Modified);
+        self.y
+            .borrow_mut()
+            .remove_listener(self_pointer, Event::Modified);
+    }
+
+    fn propagate(
+        &mut self,
+        _self_pointer: Rc<RefCell<dyn Propagator>>,
+        _search: &mut Search<'_>,
+    ) -> PropagatorState {
         let mut x_vec = Vec::with_capacity(self.x.borrow().size() as usize);
         let mut y_vec = Vec::with_capacity(self.y.borrow().size() as usize);
         for val in self.x.borrow().iter() {
@@ -97,14 +108,14 @@ impl Propagator for SimpleArithmeticPropagator {
                 Some(x) => x,
                 None => {
                     self.x.borrow().fail();
-                    return;
+                    return PropagatorState::Normal;
                 }
             };
             let mut y = match it_y.next() {
                 Some(y) => y,
                 None => {
                     self.y.borrow().fail();
-                    return;
+                    return PropagatorState::Normal;
                 }
             };
             loop {
@@ -151,14 +162,14 @@ impl Propagator for SimpleArithmeticPropagator {
                 Some(x) => x,
                 None => {
                     self.x.borrow().fail();
-                    return;
+                    return PropagatorState::Normal;
                 }
             };
             let mut y = match it_y.next() {
                 Some(y) => y,
                 None => {
                     self.y.borrow().fail();
-                    return;
+                    return PropagatorState::Normal;
                 }
             };
             loop {
@@ -199,6 +210,7 @@ impl Propagator for SimpleArithmeticPropagator {
                 self.y.borrow_mut().remove(rem_y);
             }
         }
+        PropagatorState::Normal
     }
 
     fn get_cb(&self) -> &PropagatorControlBlock {
@@ -234,17 +246,15 @@ impl Constraint for AbsConstraint {
         self.x.borrow().value() == self.y.borrow().value().abs()
     }
 
-    fn create_propagators(&self, search: &mut Search<'_>) {
+    fn create_propagators(&self, index0: usize) -> Vec<Rc<RefCell<dyn Propagator>>> {
         if self.x.as_ptr() == self.y.as_ptr() {
-            return;
+            return vec![];
         }
-        let p = Rc::new(RefCell::new(AbsPropagator::new(
+        vec![Rc::new(RefCell::new(AbsPropagator::new(
             self.x.clone(),
             self.y.clone(),
-            search.new_propagator_id(),
-        )));
-        search.add_propagator(p.clone());
-        p.borrow().listen(p.clone());
+            index0,
+        )))]
     }
 }
 
@@ -280,7 +290,26 @@ impl Propagator for AbsPropagator {
             .add_listener(self_pointer, Event::UpperBound);
     }
 
-    fn propagate(&mut self) {
+    fn unlisten(&self, self_pointer: Rc<RefCell<dyn Propagator>>) {
+        self.x
+            .borrow_mut()
+            .remove_listener(self_pointer.clone(), Event::LowerBound);
+        self.x
+            .borrow_mut()
+            .remove_listener(self_pointer.clone(), Event::UpperBound);
+        self.y
+            .borrow_mut()
+            .remove_listener(self_pointer.clone(), Event::LowerBound);
+        self.y
+            .borrow_mut()
+            .remove_listener(self_pointer, Event::UpperBound);
+    }
+
+    fn propagate(
+        &mut self,
+        _self_pointer: Rc<RefCell<dyn Propagator>>,
+        _search: &mut Search<'_>,
+    ) -> PropagatorState {
         let mut x = self.x.borrow_mut();
         let mut y = self.y.borrow_mut();
         if x.get_lb() < 0 {
@@ -290,6 +319,7 @@ impl Propagator for AbsPropagator {
         x.set_ub(y.get_ub().max(-y.get_lb()));
         y.set_lb(-x.get_ub());
         y.set_ub(x.get_ub());
+        PropagatorState::Normal
     }
 
     fn get_cb(&self) -> &PropagatorControlBlock {

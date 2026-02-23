@@ -1,6 +1,6 @@
 use crate::constraint::Constraint;
 use crate::events::Event;
-use crate::propagator::{Propagator, PropagatorControlBlock};
+use crate::propagator::{Propagator, PropagatorControlBlock, PropagatorState};
 use crate::scc::compute_scc;
 use crate::search::Search;
 use crate::variable::Variable;
@@ -195,14 +195,12 @@ impl Constraint for TreeConstraint {
         ntree == trees.len()
     }
 
-    fn create_propagators(&self, search: &mut Search<'_>) {
-        let p = Rc::new(RefCell::new(TreePropagator::new(
+    fn create_propagators(&self, index0: usize) -> Vec<Rc<RefCell<dyn Propagator>>> {
+        vec![Rc::new(RefCell::new(TreePropagator::new(
             self.ntree.clone(),
             self.parent.clone(),
-            search.new_propagator_id(),
-        )));
-        search.add_propagator(p.clone());
-        p.borrow().listen(p.clone());
+            index0,
+        )))]
     }
 }
 
@@ -237,10 +235,24 @@ impl Propagator for TreePropagator {
         }
     }
 
-    fn propagate(&mut self) {
+    fn unlisten(&self, self_pointer: Rc<RefCell<dyn Propagator>>) {
+        self.ntree
+            .borrow_mut()
+            .remove_listener(self_pointer.clone(), Event::Modified);
+        for v in &self.parent {
+            v.borrow_mut()
+                .remove_listener(self_pointer.clone(), Event::Modified);
+        }
+    }
+
+    fn propagate(
+        &mut self,
+        _self_pointer: Rc<RefCell<dyn Propagator>>,
+        _search: &mut Search<'_>,
+    ) -> PropagatorState {
         let n = self.parent.len();
         if n == 1 {
-            return;
+            return PropagatorState::Terminated;
         }
         let mut ext_gr = vec![Vec::new(); n + 1];
         let mut gr = vec![Vec::new(); n];
@@ -280,17 +292,17 @@ impl Propagator for TreePropagator {
             }
         }
         if !self.ntree.borrow_mut().set_lb(mintree) {
-            return;
+            return PropagatorState::Normal;
         }
         if !self.ntree.borrow_mut().set_ub(maxtree) {
-            return;
+            return PropagatorState::Normal;
         }
         let mut dt = DominatorTree::new(ext_gr);
         dt.build();
         let dom = dt.get_dominators();
         if dom.contains(&usize::MAX) {
             self.parent[0].borrow_mut().fail();
-            return;
+            return PropagatorState::Normal;
         }
         let mut tree = vec![Vec::new(); n + 1];
         let mut tin = vec![0; n + 1];
@@ -309,6 +321,7 @@ impl Propagator for TreePropagator {
                 }
             }
         }
+        PropagatorState::Normal
     }
 
     fn get_cb(&self) -> &PropagatorControlBlock {

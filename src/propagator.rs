@@ -1,3 +1,4 @@
+use crate::search::Search;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -17,10 +18,26 @@ impl PropagatorControlBlock {
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum PropagatorState {
+    Normal,
+    /// Tells the search to remove the propagator in the current subtree.
+    Terminated,
+}
+
 pub trait Propagator {
+    /// Subscribes itself to all required events.
+    /// Important note: self_pointer may actually not point to self (this happens with reified propagators).
     fn listen(&self, self_pointer: Rc<RefCell<dyn Propagator>>);
 
-    fn propagate(&mut self);
+    /// Unsubscribes itself from all required events.
+    fn unlisten(&self, self_pointer: Rc<RefCell<dyn Propagator>>);
+
+    fn propagate(
+        &mut self,
+        self_pointer: Rc<RefCell<dyn Propagator>>,
+        search: &mut Search<'_>,
+    ) -> PropagatorState;
 
     fn get_cb(&self) -> &PropagatorControlBlock;
 

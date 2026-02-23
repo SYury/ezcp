@@ -2,7 +2,7 @@ use crate::brancher::Brancher;
 use crate::config::Config;
 use crate::constraint::Constraint;
 use crate::objective_function::ObjectiveFunction;
-use crate::propagator::Propagator;
+use crate::propagator::{Propagator, PropagatorState};
 use crate::variable::Variable;
 use crate::variable_selector::VariableSelector;
 use std::cell::RefCell;
@@ -36,6 +36,8 @@ struct SearchNode {
     pub var: Option<Rc<RefCell<Variable>>>,
     pub branch: usize,
     pub n_branches: usize,
+    pub n_propagators: usize,
+    pub terminated: Vec<Rc<RefCell<dyn Propagator>>>,
 }
 
 pub struct Search<'a> {
@@ -93,7 +95,7 @@ impl<'a> Search<'a> {
             stats: SearchStats::default(),
         };
         for c in constraints {
-            c.create_propagators(&mut search);
+            c.add_propagators(&mut search);
         }
         search
     }
@@ -102,10 +104,12 @@ impl<'a> Search<'a> {
         self.propagators.push(p);
     }
 
-    pub fn new_propagator_id(&mut self) -> usize {
-        let id = self.propagator_id_ctr;
-        self.propagator_id_ctr += 1;
-        id
+    pub fn get_propagator_id(&self) -> usize {
+        self.propagator_id_ctr
+    }
+
+    pub fn advance_propagator_id(&mut self, x: usize) {
+        self.propagator_id_ctr += x;
     }
 
     pub fn get_objective(&self) -> i64 {
@@ -121,7 +125,7 @@ impl<'a> Search<'a> {
         true
     }
 
-    pub fn propagate(&mut self) -> bool {
+    pub fn propagate(&mut self, terminated: &mut Vec<Rc<RefCell<dyn Propagator>>>) -> bool {
         while !self.state.borrow().propagation_queue.is_empty() {
             self.state.borrow_mut().resched_current = false;
             let p = self
@@ -132,24 +136,50 @@ impl<'a> Search<'a> {
                 .unwrap();
             p.borrow_mut().dequeue();
             p.borrow_mut().clear_events();
-            p.borrow_mut().propagate();
-            p.borrow().listen(p.clone());
-            if self.state.borrow().status == -1 {
-                for prop in self.state.borrow_mut().propagation_queue.drain(..) {
-                    prop.borrow_mut().dequeue();
-                    prop.borrow().listen(prop.clone());
+            let state = p.borrow_mut().propagate(p.clone(), self);
+            match state {
+                PropagatorState::Normal => {
+                    p.borrow().listen(p.clone());
+                    if self.state.borrow().status == -1 {
+                        for prop in self.state.borrow_mut().propagation_queue.drain(..) {
+                            prop.borrow_mut().dequeue();
+                            prop.borrow().listen(prop.clone());
+                        }
+                        return false;
+                    }
+                    if self.state.borrow().resched_current && !p.borrow().is_idempotent() {
+                        self.state
+                            .borrow_mut()
+                            .propagation_queue
+                            .push_back(p.clone());
+                        p.borrow_mut().enqueue();
+                    }
                 }
-                return false;
-            }
-            if self.state.borrow().resched_current && !p.borrow().is_idempotent() {
-                self.state
-                    .borrow_mut()
-                    .propagation_queue
-                    .push_back(p.clone());
-                p.borrow_mut().enqueue();
+                PropagatorState::Terminated => {
+                    if self.state.borrow().status == -1 {
+                        p.borrow().listen(p.clone());
+                        for prop in self.state.borrow_mut().propagation_queue.drain(..) {
+                            prop.borrow_mut().dequeue();
+                            prop.borrow().listen(prop.clone());
+                        }
+                        return false;
+                    }
+                    p.borrow().unlisten(p.clone());
+                    terminated.push(p);
+                }
             }
         }
         true
+    }
+
+    fn restore_propagators(&mut self, node: &SearchNode) {
+        for p in &node.terminated {
+            p.borrow().listen(p.clone());
+        }
+        for p in &self.propagators[node.n_propagators..] {
+            p.borrow().unlisten(p.clone());
+        }
+        self.propagators.truncate(node.n_propagators);
     }
 }
 
@@ -165,7 +195,7 @@ impl Iterator for Search<'_> {
                 v.borrow_mut().rollback();
             }
         }
-        while let Some(node) = self.stack.last().cloned() {
+        while let Some(mut node) = self.stack.last().cloned() {
             if let Some(var) = &node.var {
                 if node.branch > 0 {
                     #[cfg(debug_assertions)]
@@ -175,6 +205,7 @@ impl Iterator for Search<'_> {
                     var.borrow_mut().rollback();
                 }
                 if node.branch == node.n_branches {
+                    self.restore_propagators(&node);
                     for v in self.variables {
                         v.borrow_mut().rollback();
                     }
@@ -218,10 +249,13 @@ impl Iterator for Search<'_> {
                 for v in self.variables {
                     v.borrow_mut().checkpoint();
                 }
-                if !self.propagate() {
+                assert!(node.terminated.is_empty());
+                node.n_propagators = self.propagators.len();
+                if !self.propagate(&mut node.terminated) {
                     for v in self.variables {
                         v.borrow_mut().rollback();
                     }
+                    self.restore_propagators(&node);
                     self.state.borrow_mut().status = 0;
                     self.stack.pop();
                     continue;
@@ -245,6 +279,7 @@ impl Iterator for Search<'_> {
                         for v in self.variables {
                             v.borrow_mut().rollback();
                         }
+                        self.restore_propagators(&node);
                         self.stack.pop();
                         continue;
                     }
@@ -259,6 +294,7 @@ impl Iterator for Search<'_> {
                                 self.best_solution[i] = var.borrow().value();
                             }
                             if self.all_solutions {
+                                self.restore_propagators(&node);
                                 self.stack.pop();
                                 self.stats.total_solutions_reported += 1;
                                 return Some(val);
@@ -270,6 +306,7 @@ impl Iterator for Search<'_> {
                         self.stack.pop();
                         continue;
                     }
+                    self.restore_propagators(&node);
                     self.stack.pop();
                     self.stats.total_solutions_reported += 1;
                     return Some(0);
@@ -296,6 +333,7 @@ impl Iterator for Search<'_> {
                         for v in self.variables {
                             v.borrow_mut().rollback();
                         }
+                        self.restore_propagators(&node);
                         self.stack.pop();
                         continue;
                     }
@@ -303,11 +341,10 @@ impl Iterator for Search<'_> {
                 let v = self.variable_selector.select(vars);
                 let br = self.brancher.n_branches(v.clone());
                 self.stack.pop();
-                self.stack.push(SearchNode {
-                    var: Some(v.clone()),
-                    branch: 0,
-                    n_branches: br,
-                });
+                node.var = Some(v.clone());
+                node.branch = 0;
+                node.n_branches = br;
+                self.stack.push(node);
                 continue;
             }
         }

@@ -1,6 +1,6 @@
 use crate::constraint::Constraint;
 use crate::events::Event;
-use crate::propagator::{Propagator, PropagatorControlBlock};
+use crate::propagator::{Propagator, PropagatorControlBlock, PropagatorState};
 use crate::search::Search;
 use crate::variable::Variable;
 use std::cell::RefCell;
@@ -43,15 +43,13 @@ impl Constraint for ArrayIntElementConstraint {
         }
         self.array[pos as usize - 1] == v.value()
     }
-    fn create_propagators(&self, search: &mut Search<'_>) {
-        let p = Rc::new(RefCell::new(ArrayIntElementACPropagator::new(
+    fn create_propagators(&self, index0: usize) -> Vec<Rc<RefCell<dyn Propagator>>> {
+        vec![Rc::new(RefCell::new(ArrayIntElementACPropagator::new(
             self.index.clone(),
             self.value.clone(),
             self.array.clone(),
-            search.new_propagator_id(),
-        )));
-        search.add_propagator(p.clone());
-        p.borrow().listen(p.clone());
+            index0,
+        )))]
     }
 }
 
@@ -88,7 +86,20 @@ impl Propagator for ArrayIntElementACPropagator {
             .add_listener(self_pointer.clone(), Event::Assigned);
     }
 
-    fn propagate(&mut self) {
+    fn unlisten(&self, self_pointer: Rc<RefCell<dyn Propagator>>) {
+        self.index
+            .borrow_mut()
+            .remove_listener(self_pointer.clone(), Event::Modified);
+        self.value
+            .borrow_mut()
+            .remove_listener(self_pointer.clone(), Event::Assigned);
+    }
+
+    fn propagate(
+        &mut self,
+        _self_pointer: Rc<RefCell<dyn Propagator>>,
+        _search: &mut Search<'_>,
+    ) -> PropagatorState {
         let mut idx = self.index.borrow_mut();
         idx.set_lb(1);
         idx.set_ub(self.array.len() as i64);
@@ -106,6 +117,7 @@ impl Propagator for ArrayIntElementACPropagator {
         for v in remove.into_iter() {
             val.remove(v);
         }
+        PropagatorState::Normal
     }
 
     fn get_cb(&self) -> &PropagatorControlBlock {
@@ -158,15 +170,13 @@ impl Constraint for ArrayVarElementConstraint {
         let elem = self.array[pos as usize - 1].borrow();
         elem.is_assigned() && elem.value() == v.value()
     }
-    fn create_propagators(&self, search: &mut Search) {
-        let p = Rc::new(RefCell::new(ArrayVarElementACPropagator::new(
+    fn create_propagators(&self, index0: usize) -> Vec<Rc<RefCell<dyn Propagator>>> {
+        vec![Rc::new(RefCell::new(ArrayVarElementACPropagator::new(
             self.index.clone(),
             self.value.clone(),
             self.array.clone(),
-            search.new_propagator_id(),
-        )));
-        search.add_propagator(p.clone());
-        p.borrow().listen(p.clone());
+            index0,
+        )))]
     }
 }
 
@@ -207,7 +217,24 @@ impl Propagator for ArrayVarElementACPropagator {
         }
     }
 
-    fn propagate(&mut self) {
+    fn unlisten(&self, self_pointer: Rc<RefCell<dyn Propagator>>) {
+        self.index
+            .borrow_mut()
+            .remove_listener(self_pointer.clone(), Event::Modified);
+        self.value
+            .borrow_mut()
+            .remove_listener(self_pointer.clone(), Event::Assigned);
+        for v in &self.array {
+            v.borrow_mut()
+                .remove_listener(self_pointer.clone(), Event::Modified);
+        }
+    }
+
+    fn propagate(
+        &mut self,
+        _self_pointer: Rc<RefCell<dyn Propagator>>,
+        _search: &mut Search<'_>,
+    ) -> PropagatorState {
         let mut idx = self.index.borrow_mut();
         idx.set_lb(1);
         idx.set_ub(self.array.len() as i64);
@@ -227,6 +254,7 @@ impl Propagator for ArrayVarElementACPropagator {
         for v in remove.into_iter() {
             val.remove(v);
         }
+        PropagatorState::Normal
     }
 
     fn get_cb(&self) -> &PropagatorControlBlock {
