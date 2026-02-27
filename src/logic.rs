@@ -83,11 +83,7 @@ impl Propagator for AndPropagator {
         }
     }
 
-    fn propagate(
-        &mut self,
-        _self_pointer: Rc<RefCell<dyn Propagator>>,
-        _search: &mut Search<'_>,
-    ) -> PropagatorState {
+    fn propagate(&mut self, _search: &mut Search<'_>) -> PropagatorState {
         if self.result.borrow().is_assigned() {
             let result = self.result.borrow().value();
             if result == 1 {
@@ -227,11 +223,7 @@ impl Propagator for OrPropagator {
         }
     }
 
-    fn propagate(
-        &mut self,
-        _self_pointer: Rc<RefCell<dyn Propagator>>,
-        _search: &mut Search<'_>,
-    ) -> PropagatorState {
+    fn propagate(&mut self, _search: &mut Search<'_>) -> PropagatorState {
         if self.result.borrow().is_assigned() {
             let result = self.result.borrow().value();
             if result == 1 {
@@ -364,11 +356,7 @@ impl Propagator for NegatePropagator {
             .remove_listener(self_pointer.clone(), Event::Modified);
     }
 
-    fn propagate(
-        &mut self,
-        _self_pointer: Rc<RefCell<dyn Propagator>>,
-        _search: &mut Search<'_>,
-    ) -> PropagatorState {
+    fn propagate(&mut self, _search: &mut Search<'_>) -> PropagatorState {
         for val in 0..2 {
             if !self.x.borrow().possible(val) {
                 self.y.borrow_mut().remove(val ^ 1);

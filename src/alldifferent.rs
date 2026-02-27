@@ -429,11 +429,7 @@ impl Propagator for AllDifferentACPropagator {
         }
     }
 
-    fn propagate(
-        &mut self,
-        _self_pointer: Rc<RefCell<dyn Propagator>>,
-        _search: &mut Search<'_>,
-    ) -> PropagatorState {
+    fn propagate(&mut self, _search: &mut Search<'_>) -> PropagatorState {
         let mut m = ACMatching::new(&self.vars, None);
         if let Some(g) = m.matching(MatchingReturnValue::MatchingGraph) {
             let mut scc = SCC::new(g);

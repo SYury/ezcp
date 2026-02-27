@@ -40,11 +40,7 @@ pub trait Propagator {
     /// Unsubscribes itself from all required events.
     fn unlisten(&self, self_pointer: Rc<RefCell<dyn Propagator>>);
 
-    fn propagate(
-        &mut self,
-        self_pointer: Rc<RefCell<dyn Propagator>>,
-        search: &mut Search<'_>,
-    ) -> PropagatorState;
+    fn propagate(&mut self, search: &mut Search<'_>) -> PropagatorState;
 
     fn get_cb(&self) -> &PropagatorControlBlock;
 

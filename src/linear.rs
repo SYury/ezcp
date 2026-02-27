@@ -116,11 +116,7 @@ impl Propagator for LinearInequalityPropagator {
         }
     }
 
-    fn propagate(
-        &mut self,
-        _self_pointer: Rc<RefCell<dyn Propagator>>,
-        _search: &mut Search<'_>,
-    ) -> PropagatorState {
+    fn propagate(&mut self, _search: &mut Search<'_>) -> PropagatorState {
         let mut lower_sum = 0;
         for (xx, a) in self.x.iter().zip(self.a.iter().copied()) {
             let x = xx.borrow();
@@ -248,11 +244,7 @@ impl Propagator for LinearNotEqualPropagator {
         }
     }
 
-    fn propagate(
-        &mut self,
-        _self_pointer: Rc<RefCell<dyn Propagator>>,
-        _search: &mut Search<'_>,
-    ) -> PropagatorState {
+    fn propagate(&mut self, _search: &mut Search<'_>) -> PropagatorState {
         let cnt = self.x.iter().filter(|v| v.borrow().is_assigned()).count();
         if cnt != self.x.len() - 1 {
             return PropagatorState::Normal;
@@ -385,11 +377,7 @@ impl Propagator for LinearEqualityPropagator {
         }
     }
 
-    fn propagate(
-        &mut self,
-        _self_pointer: Rc<RefCell<dyn Propagator>>,
-        _search: &mut Search<'_>,
-    ) -> PropagatorState {
+    fn propagate(&mut self, _search: &mut Search<'_>) -> PropagatorState {
         let mut lower_sum = 0;
         let mut upper_sum = 0;
         for (xx, a) in self.x.iter().zip(self.a.iter().copied()) {

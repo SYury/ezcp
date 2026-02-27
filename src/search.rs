@@ -136,7 +136,7 @@ impl<'a> Search<'a> {
                 .unwrap();
             p.borrow_mut().dequeue();
             p.borrow_mut().clear_events();
-            let state = p.borrow_mut().propagate(p.clone(), self);
+            let state = p.borrow_mut().propagate(self);
             match state {
                 PropagatorState::Normal => {
                     p.borrow().listen(p.clone());

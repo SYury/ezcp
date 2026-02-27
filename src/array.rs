@@ -95,11 +95,7 @@ impl Propagator for ArrayIntElementACPropagator {
             .remove_listener(self_pointer.clone(), Event::Assigned);
     }
 
-    fn propagate(
-        &mut self,
-        _self_pointer: Rc<RefCell<dyn Propagator>>,
-        _search: &mut Search<'_>,
-    ) -> PropagatorState {
+    fn propagate(&mut self, _search: &mut Search<'_>) -> PropagatorState {
         let mut idx = self.index.borrow_mut();
         idx.set_lb(1);
         idx.set_ub(self.array.len() as i64);
@@ -230,11 +226,7 @@ impl Propagator for ArrayVarElementACPropagator {
         }
     }
 
-    fn propagate(
-        &mut self,
-        _self_pointer: Rc<RefCell<dyn Propagator>>,
-        _search: &mut Search<'_>,
-    ) -> PropagatorState {
+    fn propagate(&mut self, _search: &mut Search<'_>) -> PropagatorState {
         let mut idx = self.index.borrow_mut();
         idx.set_lb(1);
         idx.set_ub(self.array.len() as i64);

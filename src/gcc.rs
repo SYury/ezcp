@@ -89,11 +89,7 @@ impl Propagator for GlobalCardinalityACPropagator {
         }
     }
 
-    fn propagate(
-        &mut self,
-        _self_pointer: Rc<RefCell<dyn Propagator>>,
-        _search: &mut Search<'_>,
-    ) -> PropagatorState {
+    fn propagate(&mut self, _search: &mut Search<'_>) -> PropagatorState {
         let mut m = ACMatching::new(&self.vars, Some(&self.card));
         if let Some(g) = m.matching(MatchingReturnValue::FlowGraph) {
             let scc = compute_scc(&g);

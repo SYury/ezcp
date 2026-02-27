@@ -77,11 +77,7 @@ impl Propagator for ImpliedPropagator {
         }
     }
 
-    fn propagate(
-        &mut self,
-        _self_pointer: Rc<RefCell<dyn Propagator>>,
-        search: &mut Search<'_>,
-    ) -> PropagatorState {
+    fn propagate(&mut self, search: &mut Search<'_>) -> PropagatorState {
         if self.b.borrow().is_assigned() {
             if self.b.borrow().value() == 1 {
                 self.c.borrow().add_propagators(search);
@@ -196,11 +192,7 @@ impl Propagator for ReifiedPropagator {
         }
     }
 
-    fn propagate(
-        &mut self,
-        _self_pointer: Rc<RefCell<dyn Propagator>>,
-        search: &mut Search<'_>,
-    ) -> PropagatorState {
+    fn propagate(&mut self, search: &mut Search<'_>) -> PropagatorState {
         if self.b.borrow().is_assigned() {
             if self.b.borrow().value() == 1 {
                 self.c.borrow().add_propagators(search);

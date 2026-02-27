@@ -85,11 +85,7 @@ impl Propagator for EqBCPropagator {
             .remove_listener(self_pointer.clone(), Event::UpperBound);
     }
 
-    fn propagate(
-        &mut self,
-        _self_pointer: Rc<RefCell<dyn Propagator>>,
-        _search: &mut Search<'_>,
-    ) -> PropagatorState {
+    fn propagate(&mut self, _search: &mut Search<'_>) -> PropagatorState {
         let x = self.x.borrow();
         let y = self.y.borrow();
         let l = x.get_lb().max(y.get_lb());
@@ -187,11 +183,7 @@ impl Propagator for NeqPropagator {
             .remove_listener(self_pointer.clone(), Event::Assigned);
     }
 
-    fn propagate(
-        &mut self,
-        _self_pointer: Rc<RefCell<dyn Propagator>>,
-        _search: &mut Search<'_>,
-    ) -> PropagatorState {
+    fn propagate(&mut self, _search: &mut Search<'_>) -> PropagatorState {
         if let Some(v) = self.x.borrow().try_value() {
             self.y.borrow_mut().remove(v);
         } else if let Some(v) = self.y.borrow().try_value() {

@@ -87,11 +87,7 @@ impl Propagator for SimpleArithmeticPropagator {
             .remove_listener(self_pointer, Event::Modified);
     }
 
-    fn propagate(
-        &mut self,
-        _self_pointer: Rc<RefCell<dyn Propagator>>,
-        _search: &mut Search<'_>,
-    ) -> PropagatorState {
+    fn propagate(&mut self, _search: &mut Search<'_>) -> PropagatorState {
         let mut x_vec = Vec::with_capacity(self.x.borrow().size() as usize);
         let mut y_vec = Vec::with_capacity(self.y.borrow().size() as usize);
         for val in self.x.borrow().iter() {
@@ -305,11 +301,7 @@ impl Propagator for AbsPropagator {
             .remove_listener(self_pointer, Event::UpperBound);
     }
 
-    fn propagate(
-        &mut self,
-        _self_pointer: Rc<RefCell<dyn Propagator>>,
-        _search: &mut Search<'_>,
-    ) -> PropagatorState {
+    fn propagate(&mut self, _search: &mut Search<'_>) -> PropagatorState {
         let mut x = self.x.borrow_mut();
         let mut y = self.y.borrow_mut();
         if x.get_lb() < 0 {

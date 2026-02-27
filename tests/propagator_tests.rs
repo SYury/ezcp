@@ -1,6 +1,7 @@
 use ezcp::alldifferent::AllDifferentACPropagator;
+use ezcp::config::Config;
 use ezcp::propagator::Propagator;
-use ezcp::search::SearchState;
+use ezcp::search::{Search, SearchState};
 use ezcp::variable::Variable;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -54,13 +55,14 @@ fn test_alldifferent() {
         "y".to_string(),
     )));
     let z = Rc::new(RefCell::new(Variable::new(
-        fake_search_state,
+        fake_search_state.clone(),
         2,
         2,
         "z".to_string(),
     )));
     let mut p = AllDifferentACPropagator::new(vec![x.clone(), y.clone(), z.clone()], 0);
-    p.propagate();
+    let mut fake_search = Search::new(Config::default(), &[], &[], None, fake_search_state);
+    p.propagate(&mut fake_search);
     assert_domain(x.borrow().iter(), vec![1]);
     assert_domain(y.borrow().iter(), vec![0]);
     assert_domain(z.borrow().iter(), vec![2]);

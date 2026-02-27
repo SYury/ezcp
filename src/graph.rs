@@ -245,11 +245,7 @@ impl Propagator for TreePropagator {
         }
     }
 
-    fn propagate(
-        &mut self,
-        _self_pointer: Rc<RefCell<dyn Propagator>>,
-        _search: &mut Search<'_>,
-    ) -> PropagatorState {
+    fn propagate(&mut self, _search: &mut Search<'_>) -> PropagatorState {
         let n = self.parent.len();
         if n == 1 {
             return PropagatorState::Terminated;

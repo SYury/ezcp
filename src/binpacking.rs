@@ -214,11 +214,7 @@ impl Propagator for BinPackingPropagator {
         }
     }
 
-    fn propagate(
-        &mut self,
-        _self_pointer: Rc<RefCell<dyn Propagator>>,
-        _search: &mut Search<'_>,
-    ) -> PropagatorState {
+    fn propagate(&mut self, _search: &mut Search<'_>) -> PropagatorState {
         let items = self.assignment.len();
         let bins = self.load.len();
         let mut possible = vec![Vec::<usize>::new(); bins];
