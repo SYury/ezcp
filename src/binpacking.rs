@@ -48,6 +48,26 @@ impl Constraint for BinPackingConstraint {
         true
     }
 
+    fn failed(&self) -> bool {
+        let mut load = vec![0; self.load.len()];
+        for (i, var) in self.assignment.iter().enumerate() {
+            if !var.borrow().is_assigned() {
+                return false;
+            }
+            let bin = var.borrow().value();
+            load[bin as usize] += self.weight[i];
+        }
+        for (i, var) in self.load.iter().enumerate() {
+            if !var.borrow().is_assigned() {
+                return false;
+            }
+            if load[i] != var.borrow().value() {
+                return true;
+            }
+        }
+        false
+    }
+
     fn create_propagators(&self, index0: usize) -> Vec<Rc<RefCell<dyn Propagator>>> {
         vec![Rc::new(RefCell::new(BinPackingPropagator::new(
             self.assignment.clone(),

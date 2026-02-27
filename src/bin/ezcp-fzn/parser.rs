@@ -601,7 +601,7 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                                 ))),
                             )));
                         }
-                        "int_lt" | "bool_lt" => {
+                        "int_lt" => {
                             arg_check(id, args.len(), 2)?;
                             let cvars = var_array(args, &mut solver)
                                 .map_err(|s| format!("variables of constraint {}: {}", id, s))?;
@@ -610,6 +610,19 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                                 vec![1, -1],
                                 -1,
                             )));
+                        }
+                        "bool_lt" => {
+                            arg_check(id, args.len(), 2)?;
+                            let cvars = var_array(args, &mut solver)
+                                .map_err(|s| format!("variables of constraint {}: {}", id, s))?;
+                            let zero = solver.const_variable(0);
+                            let one = solver.const_variable(1);
+                            solver.add_constraint(Box::new(EqConstraint::new(
+                                cvars[0].clone(),
+                                zero,
+                            )));
+                            solver
+                                .add_constraint(Box::new(EqConstraint::new(cvars[1].clone(), one)));
                         }
                         "int_lt_reif" | "bool_lt_reif" => {
                             arg_check(id, args.len(), 3)?;

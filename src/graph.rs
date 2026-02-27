@@ -195,6 +195,47 @@ impl Constraint for TreeConstraint {
         ntree == trees.len()
     }
 
+    fn failed(&self) -> bool {
+        if !self.ntree.borrow().is_assigned() {
+            return false;
+        }
+        let ntree = self.ntree.borrow().value() as usize;
+        let mut out = vec![Vec::new(); self.parent.len()];
+        let mut trees = Vec::new();
+        let mut used = vec![false; self.parent.len()];
+        for i in 0..self.parent.len() {
+            if !self.parent[i].borrow().is_assigned() {
+                return false;
+            }
+            let j = self.parent[i].borrow().value() as usize;
+            if i != j {
+                out[j].push(i);
+            } else {
+                trees.push(i);
+            }
+        }
+        for v in trees.iter().cloned() {
+            if used[v] {
+                return true;
+            }
+            let mut q = VecDeque::new();
+            q.push_back(v);
+            used[v] = true;
+            while !q.is_empty() {
+                let u = *q.front().unwrap();
+                q.pop_front();
+                for w in out[u].drain(..) {
+                    if used[w] {
+                        return true;
+                    }
+                    used[w] = true;
+                    q.push_back(w);
+                }
+            }
+        }
+        ntree != trees.len()
+    }
+
     fn create_propagators(&self, index0: usize) -> Vec<Rc<RefCell<dyn Propagator>>> {
         vec![Rc::new(RefCell::new(TreePropagator::new(
             self.ntree.clone(),

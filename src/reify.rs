@@ -42,11 +42,11 @@ impl Constraint for ImpliedConstraint {
     }
 
     fn create_propagators(&self, index0: usize) -> Vec<Rc<RefCell<dyn Propagator>>> {
-        vec![Rc::new(RefCell::new(ImpliedPropagator {
-            pcb: PropagatorControlBlock::new(index0),
-            b: self.b.clone(),
-            c: self.c.clone(),
-        }))]
+        vec![Rc::new(RefCell::new(ImpliedPropagator::new(
+            self.b.clone(),
+            self.c.clone(),
+            index0,
+        )))]
     }
 }
 
@@ -54,6 +54,19 @@ pub struct ImpliedPropagator {
     pcb: PropagatorControlBlock,
     b: Rc<RefCell<Variable>>,
     c: Rc<RefCell<dyn Constraint>>,
+    cprop: Vec<Rc<RefCell<dyn Propagator>>>,
+}
+
+impl ImpliedPropagator {
+    pub fn new(b: Rc<RefCell<Variable>>, c: Rc<RefCell<dyn Constraint>>, id: usize) -> Self {
+        let cprop = c.borrow().create_propagators(0);
+        Self {
+            pcb: PropagatorControlBlock::new(id),
+            b,
+            c,
+            cprop,
+        }
+    }
 }
 
 impl Propagator for ImpliedPropagator {
@@ -61,8 +74,7 @@ impl Propagator for ImpliedPropagator {
         self.b
             .borrow_mut()
             .add_listener(self_pointer.clone(), Event::Modified);
-        let prop = self.c.borrow_mut().create_propagators(0);
-        for p in prop {
+        for p in &self.cprop {
             p.borrow().listen(self_pointer.clone());
         }
     }
@@ -147,12 +159,12 @@ impl Constraint for ReifiedConstraint {
     }
 
     fn create_propagators(&self, index0: usize) -> Vec<Rc<RefCell<dyn Propagator>>> {
-        vec![Rc::new(RefCell::new(ReifiedPropagator {
-            pcb: PropagatorControlBlock::new(index0),
-            b: self.b.clone(),
-            c: self.c.clone(),
-            notc: self.notc.clone(),
-        }))]
+        vec![Rc::new(RefCell::new(ReifiedPropagator::new(
+            self.b.clone(),
+            self.c.clone(),
+            self.notc.clone(),
+            index0,
+        )))]
     }
 }
 
@@ -161,6 +173,28 @@ pub struct ReifiedPropagator {
     b: Rc<RefCell<Variable>>,
     c: Rc<RefCell<dyn Constraint>>,
     notc: Rc<RefCell<dyn Constraint>>,
+    cprop: Vec<Rc<RefCell<dyn Propagator>>>,
+    notcprop: Vec<Rc<RefCell<dyn Propagator>>>,
+}
+
+impl ReifiedPropagator {
+    pub fn new(
+        b: Rc<RefCell<Variable>>,
+        c: Rc<RefCell<dyn Constraint>>,
+        notc: Rc<RefCell<dyn Constraint>>,
+        id: usize,
+    ) -> Self {
+        let cprop = c.borrow().create_propagators(0);
+        let notcprop = notc.borrow().create_propagators(0);
+        Self {
+            pcb: PropagatorControlBlock::new(id),
+            b,
+            c,
+            notc,
+            cprop,
+            notcprop,
+        }
+    }
 }
 
 impl Propagator for ReifiedPropagator {
@@ -168,12 +202,10 @@ impl Propagator for ReifiedPropagator {
         self.b
             .borrow_mut()
             .add_listener(self_pointer.clone(), Event::Modified);
-        let prop = self.c.borrow().create_propagators(0);
-        for p in prop {
+        for p in &self.cprop {
             p.borrow().listen(self_pointer.clone());
         }
-        let prop1 = self.notc.borrow().create_propagators(0);
-        for p in prop1 {
+        for p in &self.notcprop {
             p.borrow().listen(self_pointer.clone());
         }
     }
@@ -182,12 +214,10 @@ impl Propagator for ReifiedPropagator {
         self.b
             .borrow_mut()
             .remove_listener(self_pointer.clone(), Event::Modified);
-        let prop = self.c.borrow().create_propagators(0);
-        for p in prop {
+        for p in &self.cprop {
             p.borrow().unlisten(self_pointer.clone());
         }
-        let prop1 = self.notc.borrow().create_propagators(0);
-        for p in prop1 {
+        for p in &self.notcprop {
             p.borrow().unlisten(self_pointer.clone());
         }
     }

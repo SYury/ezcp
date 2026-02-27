@@ -4,5 +4,5 @@ id = "org.ezcp.ezcp";
 executable = "ezcp-fzn";
 tags = ["cp"];
 inputType = "JSON";
-stdFlags = ["-a", "-n"];
+stdFlags = ["-a", "-n", "-t"];
 mznlib = ".";

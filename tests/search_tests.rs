@@ -1,4 +1,5 @@
 use ezcp::alldifferent::AllDifferentConstraint;
+use ezcp::cmp::NeqConstraint;
 use ezcp::config::Config;
 use ezcp::linear::LinearInequalityConstraint;
 use ezcp::objective_function::ObjectiveFunction;
@@ -7,6 +8,8 @@ use ezcp::variable::Variable;
 use std::boxed::Box;
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::thread::sleep;
+use std::time::Duration;
 
 struct SumObjective {
     vars: Vec<Rc<RefCell<Variable>>>,
@@ -54,4 +57,24 @@ fn test_optimization() {
     } else {
         panic!("The solution is not optimal!");
     }
+}
+
+#[test]
+fn test_time_limit_all_solutions() {
+    let mut solver = Solver::new();
+    let x = solver.new_variable(0, 1, format!("x"));
+    let y = solver.new_variable(0, 1, format!("y"));
+    solver.add_constraint(Box::new(NeqConstraint::new(x.clone(), y.clone())));
+    let mut config = Config::default();
+    config.all_solutions = true;
+    config.time_limit = Some(200);
+    let mut search = solver.search(config).unwrap();
+    let fst = search.next();
+    assert!(fst.is_some());
+    sleep(Duration::from_millis(400));
+    let snd = search.next();
+    assert!(snd.is_some());
+    let end = search.next();
+    assert!(end.is_none());
+    assert!(search.get_stats().borrow().whole_tree_explored);
 }

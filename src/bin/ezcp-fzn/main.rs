@@ -10,6 +10,8 @@ struct Args {
     a: bool,
     #[arg(short)]
     n: Option<usize>,
+    #[arg(short)]
+    t: Option<u64>,
     model: String,
 }
 
@@ -21,8 +23,10 @@ fn main() {
     if args.a || args.n.is_some() {
         mz.config.all_solutions = true;
     }
+    mz.config.time_limit = args.t;
     let search = mz.solver.search(mz.config).unwrap();
     let mut found = false;
+    let stats = search.get_stats();
     for (sid, _) in search.enumerate() {
         found = true;
         for item in &mz.output {
@@ -64,7 +68,9 @@ fn main() {
     }
     if found {
         println!("==========");
-    } else {
+    } else if stats.borrow().whole_tree_explored {
         println!("=====UNSATISFIABLE=====");
+    } else {
+        println!("=====UNKNOWN=====");
     }
 }

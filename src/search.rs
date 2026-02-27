@@ -8,6 +8,7 @@ use crate::variable_selector::VariableSelector;
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::rc::Rc;
+use std::time::Instant;
 
 #[derive(Default)]
 pub struct SearchState {
@@ -40,6 +41,51 @@ struct SearchNode {
     pub terminated: Vec<Rc<RefCell<dyn Propagator>>>,
 }
 
+#[derive(Clone, Copy, Default)]
+pub struct SearchStats {
+    pub depth: usize,
+    pub max_depth: usize,
+    pub fails: usize,
+    pub total_solutions_reported: usize,
+    pub whole_tree_explored: bool,
+}
+
+struct Timer {
+    start: Instant,
+    limit: i64,
+    active: bool,
+}
+
+impl Timer {
+    pub fn from_time_limit(limit: Option<u64>) -> Option<Self> {
+        limit.map(|t| Self {
+            start: Instant::now(),
+            limit: t as i64,
+            active: false,
+        })
+    }
+
+    pub fn start(&mut self) {
+        assert!(!self.active);
+        self.start = Instant::now();
+        self.active = true;
+    }
+
+    pub fn exceeded(&self) -> bool {
+        if self.active {
+            self.limit - (self.start.elapsed().as_millis() as i64) < 0
+        } else {
+            self.limit < 0
+        }
+    }
+
+    pub fn stop(&mut self) {
+        assert!(self.active);
+        self.limit -= self.start.elapsed().as_millis() as i64;
+        self.active = false;
+    }
+}
+
 pub struct Search<'a> {
     constraints: &'a [Box<dyn Constraint>],
     propagators: Vec<Rc<RefCell<dyn Propagator>>>,
@@ -54,15 +100,10 @@ pub struct Search<'a> {
     best_solution: Vec<i64>,
     propagator_id_ctr: usize,
     stack: Vec<SearchNode>,
-    stats: SearchStats,
-}
-
-#[derive(Clone, Default)]
-pub struct SearchStats {
-    pub depth: usize,
-    pub max_depth: usize,
-    pub fails: usize,
-    pub total_solutions_reported: usize,
+    // rc because if we use search with some iterator functions it may be consumed and we won't be able to get the stats after.
+    // to avoid this, we clone rc with `get_stats()`
+    stats: Rc<RefCell<SearchStats>>,
+    timer: Option<Timer>,
 }
 
 impl<'a> Search<'a> {
@@ -92,12 +133,17 @@ impl<'a> Search<'a> {
             best_solution: Vec::new(),
             propagator_id_ctr: 0,
             stack: vec![SearchNode::default()],
-            stats: SearchStats::default(),
+            stats: Rc::new(RefCell::new(SearchStats::default())),
+            timer: Timer::from_time_limit(config.time_limit),
         };
         for c in constraints {
             c.add_propagators(&mut search);
         }
         search
+    }
+
+    pub fn get_stats(&self) -> Rc<RefCell<SearchStats>> {
+        self.stats.clone()
     }
 
     pub fn add_propagator(&mut self, p: Rc<RefCell<dyn Propagator>>) {
@@ -127,6 +173,11 @@ impl<'a> Search<'a> {
 
     pub fn propagate(&mut self, terminated: &mut Vec<Rc<RefCell<dyn Propagator>>>) -> bool {
         while !self.state.borrow().propagation_queue.is_empty() {
+            if let Some(timer) = &self.timer {
+                if timer.exceeded() {
+                    return false;
+                }
+            }
             self.state.borrow_mut().resched_current = false;
             let p = self
                 .state
@@ -187,7 +238,7 @@ impl Iterator for Search<'_> {
     type Item = i64;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.stats.total_solutions_reported > 0 {
+        if self.stats.borrow().total_solutions_reported > 0 {
             if !self.all_solutions {
                 return None;
             }
@@ -195,7 +246,25 @@ impl Iterator for Search<'_> {
                 v.borrow_mut().rollback();
             }
         }
+        if let Some(timer) = &mut self.timer {
+            timer.start();
+            if timer.exceeded() {
+                timer.stop();
+                return None;
+            }
+        }
         while let Some(mut node) = self.stack.last().cloned() {
+            {
+                let mut stats = self.stats.borrow_mut();
+                stats.depth = self.stack.len() - 1;
+                stats.max_depth = stats.max_depth.max(stats.depth);
+            }
+            if let Some(timer) = &mut self.timer {
+                if timer.exceeded() {
+                    timer.stop();
+                    return None;
+                }
+            }
             if let Some(var) = &node.var {
                 if node.branch > 0 {
                     #[cfg(debug_assertions)]
@@ -252,9 +321,16 @@ impl Iterator for Search<'_> {
                 assert!(node.terminated.is_empty());
                 node.n_propagators = self.propagators.len();
                 if !self.propagate(&mut node.terminated) {
+                    if let Some(timer) = &mut self.timer {
+                        if timer.exceeded() {
+                            timer.stop();
+                            return None;
+                        }
+                    }
                     for v in self.variables {
                         v.borrow_mut().rollback();
                     }
+                    self.stats.borrow_mut().fails += 1;
                     self.restore_propagators(&node);
                     self.state.borrow_mut().status = 0;
                     self.stack.pop();
@@ -279,6 +355,7 @@ impl Iterator for Search<'_> {
                         for v in self.variables {
                             v.borrow_mut().rollback();
                         }
+                        self.stats.borrow_mut().fails += 1;
                         self.restore_propagators(&node);
                         self.stack.pop();
                         continue;
@@ -296,7 +373,10 @@ impl Iterator for Search<'_> {
                             if self.all_solutions {
                                 self.restore_propagators(&node);
                                 self.stack.pop();
-                                self.stats.total_solutions_reported += 1;
+                                self.stats.borrow_mut().total_solutions_reported += 1;
+                                if let Some(timer) = &mut self.timer {
+                                    timer.stop();
+                                }
                                 return Some(val);
                             }
                         }
@@ -309,7 +389,10 @@ impl Iterator for Search<'_> {
                     }
                     self.restore_propagators(&node);
                     self.stack.pop();
-                    self.stats.total_solutions_reported += 1;
+                    self.stats.borrow_mut().total_solutions_reported += 1;
+                    if let Some(timer) = &mut self.timer {
+                        timer.stop();
+                    }
                     return Some(0);
                 }
                 #[cfg(debug_assertions)]
@@ -349,13 +432,17 @@ impl Iterator for Search<'_> {
                 continue;
             }
         }
+        if let Some(timer) = &mut self.timer {
+            timer.stop();
+        }
         if !self.all_solutions && !self.best_solution.is_empty() {
-            self.stats.total_solutions_reported = 1;
+            self.stats.borrow_mut().total_solutions_reported = 1;
             for (i, v) in self.variables.iter().enumerate() {
                 v.borrow_mut().assign(self.best_solution[i]);
             }
             return Some(self.current_min);
         }
+        self.stats.borrow_mut().whole_tree_explored = true;
         None
     }
 }

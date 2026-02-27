@@ -49,6 +49,9 @@ impl Constraint for GlobalCardinalityConstraint {
         }
         true
     }
+    fn failed(&self) -> bool {
+        false // TODO: this constraint needs more work anyway
+    }
     fn create_propagators(&self, index0: usize) -> Vec<Rc<RefCell<dyn Propagator>>> {
         vec![Rc::new(RefCell::new(GlobalCardinalityACPropagator::new(
             self.vars.clone(),

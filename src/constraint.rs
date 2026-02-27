@@ -7,9 +7,7 @@ pub trait Constraint {
     /// True if all variables are assigned and the constraint is satisfied.
     fn satisfied(&self) -> bool;
     /// True if the constraint is definitely unsatisfied (may return true even if not all variables are assigned).
-    fn failed(&self) -> bool {
-        false //  TODO: stub
-    }
+    fn failed(&self) -> bool;
     /// Creates propagators with indices starting from index0
     fn create_propagators(&self, index0: usize) -> Vec<Rc<RefCell<dyn Propagator>>>;
     fn add_propagators(&self, search: &mut Search<'_>) {

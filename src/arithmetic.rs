@@ -4,6 +4,7 @@ use crate::propagator::{Propagator, PropagatorControlBlock, PropagatorState};
 use crate::search::Search;
 use crate::variable::Variable;
 use std::cell::RefCell;
+use std::collections::HashSet;
 use std::rc::Rc;
 
 /// x +- y = C
@@ -29,6 +30,20 @@ impl Constraint for SimpleArithmeticConstraint {
         } else {
             self.x.borrow().value() - self.y.borrow().value() == self.c
         }
+    }
+
+    fn failed(&self) -> bool {
+        let mut can = HashSet::new();
+        for u in self.x.borrow().iter() {
+            can.insert(u);
+        }
+        for v in self.y.borrow().iter() {
+            let u = if self.plus { self.c - v } else { self.c + v };
+            if can.contains(&u) {
+                return false;
+            }
+        }
+        true
     }
 
     fn create_propagators(&self, index0: usize) -> Vec<Rc<RefCell<dyn Propagator>>> {
@@ -240,6 +255,12 @@ impl Constraint for AbsConstraint {
             return false;
         }
         self.x.borrow().value() == self.y.borrow().value().abs()
+    }
+
+    fn failed(&self) -> bool {
+        self.x.borrow().is_assigned()
+            && self.y.borrow().is_assigned()
+            && self.x.borrow().value() != self.y.borrow().value().abs()
     }
 
     fn create_propagators(&self, index0: usize) -> Vec<Rc<RefCell<dyn Propagator>>> {

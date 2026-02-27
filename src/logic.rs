@@ -20,9 +20,9 @@ impl AndConstraint {
 
 impl Constraint for AndConstraint {
     fn satisfied(&self) -> bool {
-        let result = match self.result.borrow().is_assigned() {
-            true => self.result.borrow().value(),
-            false => {
+        let result = match self.result.borrow().try_value() {
+            Some(val) => val,
+            None => {
                 return false;
             }
         };
@@ -35,6 +35,24 @@ impl Constraint for AndConstraint {
             }
         }
         result != 0
+    }
+
+    fn failed(&self) -> bool {
+        let result = match self.result.borrow().try_value() {
+            Some(val) => val,
+            None => {
+                return false;
+            }
+        };
+        for v in &self.vars {
+            if !v.borrow().is_assigned() {
+                return false;
+            }
+            if v.borrow().value() == 0 {
+                return result != 0;
+            }
+        }
+        result == 0
     }
 
     fn create_propagators(&self, index0: usize) -> Vec<Rc<RefCell<dyn Propagator>>> {
@@ -160,9 +178,9 @@ impl OrConstraint {
 
 impl Constraint for OrConstraint {
     fn satisfied(&self) -> bool {
-        let result = match self.result.borrow().is_assigned() {
-            true => self.result.borrow().value(),
-            false => {
+        let result = match self.result.borrow().try_value() {
+            Some(val) => val,
+            None => {
                 return false;
             }
         };
@@ -175,6 +193,24 @@ impl Constraint for OrConstraint {
             }
         }
         result == 0
+    }
+
+    fn failed(&self) -> bool {
+        let result = match self.result.borrow().try_value() {
+            Some(val) => val,
+            None => {
+                return false;
+            }
+        };
+        for v in &self.vars {
+            if !v.borrow().is_assigned() {
+                return false;
+            }
+            if v.borrow().value() == 1 {
+                return result == 0;
+            }
+        }
+        result != 0
     }
 
     fn create_propagators(&self, index0: usize) -> Vec<Rc<RefCell<dyn Propagator>>> {
@@ -309,6 +345,14 @@ impl Constraint for NegateConstraint {
             false
         } else {
             self.x.borrow().value() != self.y.borrow().value()
+        }
+    }
+
+    fn failed(&self) -> bool {
+        if !self.x.borrow().is_assigned() || !self.y.borrow().is_assigned() {
+            false
+        } else {
+            self.x.borrow().value() == self.y.borrow().value()
         }
     }
 

@@ -43,6 +43,20 @@ impl Constraint for ArrayIntElementConstraint {
         }
         self.array[pos as usize - 1] == v.value()
     }
+
+    fn failed(&self) -> bool {
+        let i = self.index.borrow();
+        let v = self.value.borrow();
+        if !i.is_assigned() || !v.is_assigned() {
+            return false;
+        }
+        let pos = i.value();
+        if pos < 1 || pos > (self.array.len() as i64) {
+            return true;
+        }
+        self.array[pos as usize - 1] != v.value()
+    }
+
     fn create_propagators(&self, index0: usize) -> Vec<Rc<RefCell<dyn Propagator>>> {
         vec![Rc::new(RefCell::new(ArrayIntElementACPropagator::new(
             self.index.clone(),
@@ -166,6 +180,21 @@ impl Constraint for ArrayVarElementConstraint {
         let elem = self.array[pos as usize - 1].borrow();
         elem.is_assigned() && elem.value() == v.value()
     }
+
+    fn failed(&self) -> bool {
+        let i = self.index.borrow();
+        let v = self.value.borrow();
+        if !i.is_assigned() || !v.is_assigned() {
+            return false;
+        }
+        let pos = i.value();
+        if pos < 1 || pos > (self.array.len() as i64) {
+            return true;
+        }
+        let elem = self.array[pos as usize - 1].borrow();
+        elem.is_assigned() && elem.value() != v.value()
+    }
+
     fn create_propagators(&self, index0: usize) -> Vec<Rc<RefCell<dyn Propagator>>> {
         vec![Rc::new(RefCell::new(ArrayVarElementACPropagator::new(
             self.index.clone(),
