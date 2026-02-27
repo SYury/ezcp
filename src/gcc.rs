@@ -1,3 +1,7 @@
+use rustc_hash::FxHashMap as HashMap;
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use crate::alldifferent::{ACMatching, MatchingReturnValue};
 use crate::constraint::Constraint;
 use crate::events::Event;
@@ -5,9 +9,6 @@ use crate::propagator::{Propagator, PropagatorControlBlock, PropagatorState};
 use crate::scc::compute_scc;
 use crate::search::Search;
 use crate::variable::Variable;
-use std::cell::RefCell;
-use std::collections::HashMap;
-use std::rc::Rc;
 
 pub struct GlobalCardinalityConstraint {
     vars: Vec<Rc<RefCell<Variable>>>,
@@ -16,7 +17,7 @@ pub struct GlobalCardinalityConstraint {
 
 impl GlobalCardinalityConstraint {
     pub fn new(vars: Vec<Rc<RefCell<Variable>>>, card: HashMap<i64, usize>) -> Self {
-        let mut c = HashMap::new();
+        let mut c = HashMap::default();
         for (k, v) in card {
             c.insert(k, v as i32);
         }
@@ -26,7 +27,7 @@ impl GlobalCardinalityConstraint {
 
 impl Constraint for GlobalCardinalityConstraint {
     fn satisfied(&self) -> bool {
-        let mut card = HashMap::<i64, i32>::new();
+        let mut card = HashMap::<i64, i32>::default();
         for v in &self.vars {
             if !v.borrow().is_assigned() {
                 return false;

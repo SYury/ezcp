@@ -321,20 +321,8 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                         "int_lin_eq" | "bool_lin_eq" => {
                             success = true;
                             solver.add_constraint(Box::new(LinearEqualityConstraint::new(
-                                cvars.clone(),
-                                arr.clone(),
-                                bound,
+                                cvars, arr, bound,
                             )));
-                            /*solver.add_constraint(Box::new(LinearInequalityConstraint::new(
-                                cvars.clone(),
-                                arr.clone(),
-                                bound,
-                            )));
-                            solver.add_constraint(Box::new(LinearInequalityConstraint::new(
-                                cvars.clone(),
-                                arr.into_iter().map(|x| -x).collect::<Vec<_>>(),
-                                -bound,
-                            )));*/
                         }
                         "int_lin_eq_reif" | "bool_lin_eq_reif" => {
                             success = true;

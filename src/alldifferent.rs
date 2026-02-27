@@ -1,11 +1,12 @@
+use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use crate::constraint::Constraint;
 use crate::events::Event;
 use crate::propagator::{Propagator, PropagatorControlBlock, PropagatorState};
 use crate::search::Search;
 use crate::variable::Variable;
-use std::cell::RefCell;
-use std::collections::{BinaryHeap, HashMap, HashSet};
-use std::rc::Rc;
 
 pub struct AllDifferentConstraint {
     vars: Vec<Rc<RefCell<Variable>>>,
@@ -19,7 +20,7 @@ impl AllDifferentConstraint {
 
 impl Constraint for AllDifferentConstraint {
     fn satisfied(&self) -> bool {
-        let mut vals = HashSet::new();
+        let mut vals = HashSet::default();
         for v in &self.vars {
             if v.borrow().is_assigned() {
                 let val = v.borrow().value();
@@ -34,7 +35,7 @@ impl Constraint for AllDifferentConstraint {
     }
 
     fn failed(&self) -> bool {
-        let mut vals = HashSet::new();
+        let mut vals = HashSet::default();
         for v in &self.vars {
             if let Some(x) = v.borrow().try_value() {
                 if !vals.insert(x) {
@@ -67,8 +68,20 @@ pub struct SCC {
 impl SCC {
     pub fn new(gr: Vec<Vec<usize>>) -> Self {
         let n = gr.len();
-        let mut rev_id_map = vec![Vec::<usize>::new(); n];
-        let mut grt = vec![Vec::<usize>::new(); n];
+        let mut grt_size = vec![0usize; n];
+        for row in gr.iter() {
+            for j in row.iter() {
+                grt_size[*j] += 1;
+            }
+        }
+        let mut rev_id_map = grt_size
+            .iter()
+            .map(|s| Vec::<usize>::with_capacity(*s))
+            .collect::<Vec<_>>();
+        let mut grt = grt_size
+            .into_iter()
+            .map(Vec::<usize>::with_capacity)
+            .collect::<Vec<_>>();
         for (i, row) in gr.iter().enumerate() {
             for (id, j) in row.iter().cloned().enumerate() {
                 grt[j].push(i);
@@ -79,7 +92,7 @@ impl SCC {
             gr,
             grt,
             used: vec![false; n],
-            order: Vec::new(),
+            order: Vec::with_capacity(n),
             comp: vec![-1; n],
             rev_id_map,
             n,
@@ -217,62 +230,60 @@ pub(crate) enum MatchingReturnValue {
 impl ACMatching {
     pub fn new(vars: &[Rc<RefCell<Variable>>], count: Option<&HashMap<i64, i32>>) -> Self {
         let n = vars.len();
-        let mut edges = Vec::<FlowEdge>::new();
-        let mut graph = Vec::<Vec<usize>>::with_capacity(n);
-        let mut vals = Vec::<i64>::new();
-        let mut h = BinaryHeap::<(i64, usize)>::new();
+        let mut val_id = HashMap::<i64, (usize, usize)>::default();
         let mut borrowed_vars = Vec::with_capacity(n);
-        let mut it = Vec::<Box<dyn Iterator<Item = i64> + '_>>::with_capacity(n);
         for v in vars {
             borrowed_vars.push(v.borrow());
         }
+        let mut total_val_size = 0;
         for var in &borrowed_vars {
-            graph.push(Vec::new());
-            it.push(var.iter());
-        }
-        for (i, iter) in it.iter_mut().enumerate() {
-            if let Some(val) = iter.next() {
-                h.push((-val, i));
+            for val in var.iter() {
+                total_val_size += 1;
+                if let Some(res) = val_id.get_mut(&val) {
+                    res.1 += 1;
+                } else {
+                    let new_id = val_id.len();
+                    val_id.insert(val, (new_id, 1));
+                }
             }
         }
-        while !h.is_empty() {
-            let tmp = h.pop().unwrap();
-            let mut i = tmp.1;
-            let v = tmp.0;
-            let vertex = vals.len() + n;
-            vals.push(-v);
-            graph.push(Vec::new());
-            loop {
+        let mut edges = Vec::<FlowEdge>::with_capacity(2 * (n + val_id.len() + total_val_size));
+        let mut graph = Vec::<Vec<usize>>::with_capacity(n + val_id.len() + 2);
+        let mut vals = vec![0i64; val_id.len()];
+        let mut val_size = vec![0usize; val_id.len()];
+        for (v, (id, c)) in val_id.iter() {
+            vals[*id] = *v;
+            val_size[*id] = *c;
+        }
+        for var in &borrowed_vars {
+            graph.push(Vec::with_capacity((var.size() as usize) + 1));
+        }
+        for s in &val_size {
+            graph.push(Vec::with_capacity(*s + 1));
+        }
+        graph.push(Vec::with_capacity(n));
+        graph.push(Vec::with_capacity(val_id.len()));
+        let s = n + val_id.len();
+        let t = n + val_id.len() + 1;
+        for (i, var) in borrowed_vars.iter().enumerate() {
+            for val in var.iter() {
+                let id = val_id.get(&val).unwrap().0;
                 let e = edges.len();
-                edges.push(FlowEdge::new(vertex, 1));
+                edges.push(FlowEdge::new(id + n, 1));
                 edges.push(FlowEdge::new(i, 0));
                 graph[i].push(e);
-                graph[vertex].push(e + 1);
-                if let Some(nxt_val) = it[i].next() {
-                    h.push((-nxt_val, i));
-                }
-                if h.is_empty() || h.peek().unwrap().0 != v {
-                    break;
-                }
-                i = h.pop().unwrap().1;
+                graph[id + n].push(e + 1);
             }
-        }
-        let s = graph.len();
-        let t = s + 1;
-        for _ in 0..2 {
-            graph.push(Vec::new());
-        }
-        for i in 0..n {
             let e = edges.len();
             edges.push(FlowEdge::new(i, 1));
             edges.push(FlowEdge::new(s, 0));
             graph[s].push(e);
             graph[i].push(e + 1);
         }
-        for i in n..vals.len() + n {
+        for i in n..n + val_id.len() {
             let e = edges.len();
-            if let Some(map) = count {
-                edges.push(FlowEdge::new(t, *map.get(&vals[i - n]).unwrap()));
+            if let Some(c) = count.and_then(|m| m.get(&vals[i - n]).copied()) {
+                edges.push(FlowEdge::new(t, c));
             } else {
                 edges.push(FlowEdge::new(t, 1));
             }
@@ -366,11 +377,27 @@ impl ACMatching {
         }
         match ret {
             MatchingReturnValue::MatchingGraph => {
-                let mut ans = vec![Vec::<usize>::new(); self.graph.len() - 2];
+                let mut ans_size = vec![0; self.graph.len() - 2];
                 for v in 0..self.graph.len() - 2 - self.vals.len() {
-                    for id in self.graph[v].iter().cloned() {
+                    for id in self.graph[v].iter().copied() {
                         let u = self.edges[id].to;
-                        if self.edges[id].to < self.graph.len() - 2 && self.edges[id].capacity > 0 {
+                        if u < self.graph.len() - 2 && self.edges[id].capacity > 0 {
+                            if self.edges[id].flow == self.edges[id].capacity {
+                                ans_size[v] += 1;
+                            } else {
+                                ans_size[u] += 1;
+                            }
+                        }
+                    }
+                }
+                let mut ans = ans_size
+                    .into_iter()
+                    .map(Vec::<usize>::with_capacity)
+                    .collect::<Vec<_>>();
+                for v in 0..self.graph.len() - 2 - self.vals.len() {
+                    for id in self.graph[v].iter().copied() {
+                        let u = self.edges[id].to;
+                        if u < self.graph.len() - 2 && self.edges[id].capacity > 0 {
                             if self.edges[id].flow == self.edges[id].capacity {
                                 ans[v].push(u);
                             } else {

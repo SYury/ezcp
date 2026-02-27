@@ -1,12 +1,13 @@
+use rustc_hash::FxHashMap as HashMap;
+use std::boxed::Box;
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use crate::bitset::BitsetDomain;
 use crate::domain::{Domain, DomainState, SmallDomain};
 use crate::events::{event_index, Event, N_EVENTS};
 use crate::propagator::Propagator;
 use crate::search::SearchState;
-use std::boxed::Box;
-use std::cell::RefCell;
-use std::collections::HashMap;
-use std::rc::Rc;
 
 pub struct Variable {
     pub domain: Box<dyn Domain>,
