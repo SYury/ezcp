@@ -155,7 +155,7 @@ impl Propagator for LinearInequalityPropagator {
     }
 
     fn is_idempotent(&self) -> bool {
-        true
+        false
     }
 }
 
@@ -431,6 +431,6 @@ impl Propagator for LinearEqualityPropagator {
     }
 
     fn is_idempotent(&self) -> bool {
-        true
+        false
     }
 }

@@ -25,6 +25,13 @@ pub enum PropagatorState {
     Terminated,
 }
 
+/// This enum is to be used by constraints with more than one possible propagator.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum PropagationLevel {
+    AC,
+    BC,
+}
+
 pub trait Propagator {
     /// Subscribes itself to all required events.
     /// Important note: self_pointer may actually not point to self (this happens with reified propagators).

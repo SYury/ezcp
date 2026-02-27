@@ -54,6 +54,7 @@ impl Solver {
             val,
             format!("_ezcp_internal_const_{}", val),
         )));
+        self.const_vars.insert(val, var.clone());
         self.variables.push(var.clone());
         var
     }

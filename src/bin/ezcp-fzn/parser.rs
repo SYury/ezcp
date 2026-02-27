@@ -3,6 +3,7 @@ use ezcp::arithmetic::AbsConstraint;
 use ezcp::array::{ArrayIntElementConstraint, ArrayVarElementConstraint};
 use ezcp::binpacking::BinPackingConstraint;
 use ezcp::brancher::{MaxValueBrancher, MedianValueBrancher, MinValueBrancher, SplitBrancher};
+use ezcp::cmp::{EqConstraint, NeqConstraint};
 use ezcp::config::Config;
 use ezcp::linear::{
     LinearEqualityConstraint, LinearInequalityConstraint, LinearNotEqualConstraint,
@@ -324,6 +325,16 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                                 arr.clone(),
                                 bound,
                             )));
+                            /*solver.add_constraint(Box::new(LinearInequalityConstraint::new(
+                                cvars.clone(),
+                                arr.clone(),
+                                bound,
+                            )));
+                            solver.add_constraint(Box::new(LinearInequalityConstraint::new(
+                                cvars.clone(),
+                                arr.into_iter().map(|x| -x).collect::<Vec<_>>(),
+                                -bound,
+                            )));*/
                         }
                         "int_lin_eq_reif" | "bool_lin_eq_reif" => {
                             success = true;
@@ -532,10 +543,9 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                             arg_check(id, args.len(), 2)?;
                             let cvars = var_array(args, &mut solver)
                                 .map_err(|s| format!("variables of constraint {}: {}", id, s))?;
-                            solver.add_constraint(Box::new(LinearEqualityConstraint::new(
-                                cvars.clone(),
-                                vec![1, -1],
-                                0,
+                            solver.add_constraint(Box::new(EqConstraint::new(
+                                cvars[0].clone(),
+                                cvars[1].clone(),
                             )));
                         }
                         "int_eq_reif" | "bool_eq_reif" => {
@@ -544,15 +554,13 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                                 .map_err(|s| format!("variables of constraint {}: {}", id, s))?;
                             solver.add_constraint(Box::new(ReifiedConstraint::new(
                                 cvars[2].clone(),
-                                Rc::new(RefCell::new(LinearEqualityConstraint::new(
-                                    cvars[..2].to_vec(),
-                                    vec![1, -1],
-                                    0,
+                                Rc::new(RefCell::new(EqConstraint::new(
+                                    cvars[0].clone(),
+                                    cvars[1].clone(),
                                 ))),
-                                Rc::new(RefCell::new(LinearNotEqualConstraint::new(
-                                    cvars[..2].to_vec(),
-                                    vec![1, -1],
-                                    0,
+                                Rc::new(RefCell::new(NeqConstraint::new(
+                                    cvars[0].clone(),
+                                    cvars[1].clone(),
                                 ))),
                             )));
                         }
@@ -625,10 +633,9 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                             arg_check(id, args.len(), 2)?;
                             let cvars = var_array(args, &mut solver)
                                 .map_err(|s| format!("variables of constraint {}: {}", id, s))?;
-                            solver.add_constraint(Box::new(LinearNotEqualConstraint::new(
-                                cvars,
-                                vec![1, -1],
-                                0,
+                            solver.add_constraint(Box::new(NeqConstraint::new(
+                                cvars[0].clone(),
+                                cvars[1].clone(),
                             )));
                         }
                         "int_ne_reif" => {
@@ -637,15 +644,13 @@ pub fn parse(json: serde_json::Value) -> Result<MinizincParseResult, String> {
                                 .map_err(|s| format!("variables of constraint {}: {}", id, s))?;
                             solver.add_constraint(Box::new(ReifiedConstraint::new(
                                 cvars[2].clone(),
-                                Rc::new(RefCell::new(LinearNotEqualConstraint::new(
-                                    cvars[..2].to_vec(),
-                                    vec![1, -1],
-                                    0,
+                                Rc::new(RefCell::new(NeqConstraint::new(
+                                    cvars[0].clone(),
+                                    cvars[1].clone(),
                                 ))),
-                                Rc::new(RefCell::new(LinearEqualityConstraint::new(
-                                    cvars[..2].to_vec(),
-                                    vec![1, -1],
-                                    0,
+                                Rc::new(RefCell::new(EqConstraint::new(
+                                    cvars[0].clone(),
+                                    cvars[1].clone(),
                                 ))),
                             )));
                         }

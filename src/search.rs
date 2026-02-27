@@ -342,7 +342,7 @@ impl Iterator for Search<'_> {
                 let v = self.variable_selector.select(vars);
                 let br = self.brancher.n_branches(v.clone());
                 self.stack.pop();
-                node.var = Some(v.clone());
+                node.var = Some(v);
                 node.branch = 0;
                 node.n_branches = br;
                 self.stack.push(node);

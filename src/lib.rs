@@ -4,6 +4,7 @@ pub mod array;
 pub mod binpacking;
 pub mod bitset;
 pub mod brancher;
+pub mod cmp;
 pub mod config;
 pub mod constraint;
 pub mod domain;
